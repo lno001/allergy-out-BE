@@ -22,7 +22,7 @@ public class PageInfo {
 
 	public void calculateTotalPage(int totalElements) {
 		this.totalElements = totalElements;
-		this.totalElements = (this.totalElements + this.size -1 ) / this.size;
+		this.totalPages = (this.totalElements + this.size -1 ) / this.size;
 	}
 
 }
