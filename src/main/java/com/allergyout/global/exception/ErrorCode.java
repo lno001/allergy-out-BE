@@ -12,7 +12,7 @@ public enum ErrorCode {
     DUPLICATE_VALUE(HttpStatus.CONFLICT, "이미 사용 중인 값입니다."),           // 이메일/연락처/아이디 등 UNIQUE 위반
 
     // 개별 코드 - msg 자체가 구체 문구, data 없음
-    PASSWORD_MISMATCH(HttpStatus.BAD_REQUEST, "기존 비밀번호가 일치하지 않습니다."),
+    PASSWORD_MISMATCH(HttpStatus.BAD_REQUEST, "비밀번호가 일치하지 않습니다."),
     PASSWORD_SAME_AS_OLD(HttpStatus.BAD_REQUEST, "새 비밀번호는 기존 비밀번호와 달라야 합니다."),
     IMAGE_ALREADY_DEFAULT(HttpStatus.BAD_REQUEST, "이미 기본 프로필 사진입니다."),
 

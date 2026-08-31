@@ -8,8 +8,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.allergyout.auth.model.dao.TokenMapper;
 import com.allergyout.global.exception.CustomException;
 import com.allergyout.global.exception.ErrorCode;
+import com.allergyout.global.security.CookieUtil;
 import com.allergyout.member.model.dao.MemberMapper;
 import com.allergyout.member.model.dto.MemberEmailResponse;
 import com.allergyout.member.model.dto.MemberImgResponse;
@@ -19,6 +21,7 @@ import com.allergyout.member.model.dto.MemberResponse;
 import com.allergyout.member.model.vo.Member;
 import com.allergyout.s3.S3Service;
 
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 
 @Service
@@ -30,6 +33,8 @@ public class MemberService {
     private final MemberMapper memberMapper;
     private final PasswordEncoder passwordEncoder;
     private final S3Service s3Service;
+    private final TokenMapper tokenMapper;   // 탈퇴 시 리프레시 토큰 폐기 (auth 담당 DAO 재사용)
+    private final CookieUtil cookieUtil;     // 탈퇴 시 인증 쿠키 삭제 (auth 담당 유틸 재사용)
 
     @Transactional(readOnly = true)
     public MemberResponse getMember(Long memberNo) {
@@ -125,6 +130,21 @@ public class MemberService {
         }
         memberMapper.updateMemberImgPath(memberNo, null);
         s3Service.delete(extractKey(member.getMemberImgPath()));
+    }
+
+    // 회원 탈퇴: 본인 확인(비밀번호) → 소프트 삭제 → 모든 세션 토큰 폐기 + 이 브라우저 쿠키 삭제
+    @Transactional
+    public void deleteMember(Long memberNo, String memberPwd, HttpServletResponse response) {
+        Member member = memberMapper.getMember(memberNo);
+        if (member == null) {
+            throw new CustomException(ErrorCode.ENTITY_NOT_FOUND);
+        }
+        if (!passwordEncoder.matches(memberPwd, member.getMemberPwd())) {
+            throw new CustomException(ErrorCode.PASSWORD_MISMATCH);
+        }
+        memberMapper.updateMemberDelYn(memberNo);   // DEL_YN = 'Y'
+        tokenMapper.deleteByMemberNo(memberNo);     // 그 회원의 리프레시 토큰 전부 삭제 (로그아웃은 현재 1개만)
+        cookieUtil.deleteAuthCookies(response);     // access/refresh 쿠키 Max-Age=0
     }
 
     // virtual-hosted-style URL(https://{bucket}.s3.{region}.amazonaws.com/{key})에서 key만 추출.

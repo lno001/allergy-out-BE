@@ -24,8 +24,10 @@ import com.allergyout.member.model.dto.MemberPhoneResponse;
 import com.allergyout.member.model.dto.MemberPhoneUpdateRequest;
 import com.allergyout.member.model.dto.MemberPwdUpdateRequest;
 import com.allergyout.member.model.dto.MemberResponse;
+import com.allergyout.member.model.dto.MemberWithdrawRequest;
 import com.allergyout.member.model.service.MemberService;
 
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
@@ -88,5 +90,14 @@ public class MemberController {
             @AuthenticationPrincipal CustomUserDetails user) {
         memberService.deleteMemberImg(user.getMemberNo());
         return ResponseEntity.ok(ApiResponse.success("프로필 사진 삭제 성공", null));
+    }
+
+    @DeleteMapping
+    public ResponseEntity<ApiResponse<Void>> deleteMember(
+            @Valid @RequestBody MemberWithdrawRequest request,
+            @AuthenticationPrincipal CustomUserDetails user,
+            HttpServletResponse response) {
+        memberService.deleteMember(user.getMemberNo(), request.memberPwd(), response);
+        return ResponseEntity.ok(ApiResponse.success("회원 탈퇴가 완료되었습니다.", null));
     }
 }

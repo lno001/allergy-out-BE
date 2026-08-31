@@ -74,6 +74,14 @@
            AND DEL_YN = 'N'
     </update>
 
+    <!-- 회원 탈퇴 - 소프트 삭제 -->
+    <update id="updateMemberDelYn">
+        UPDATE MEMBER
+           SET DEL_YN = 'Y'
+         WHERE MEMBER_NO = #{memberNo}
+           AND DEL_YN = 'N'
+    </update>
+
     <!-- ============================================================
          auth (로그인/회원가입) - auth 브랜치 병합분
          ============================================================ -->

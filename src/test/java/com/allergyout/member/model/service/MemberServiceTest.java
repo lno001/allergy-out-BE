@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.entry;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -22,8 +23,10 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.allergyout.auth.model.dao.TokenMapper;
 import com.allergyout.global.exception.CustomException;
 import com.allergyout.global.exception.ErrorCode;
+import com.allergyout.global.security.CookieUtil;
 import com.allergyout.member.model.dao.MemberMapper;
 import com.allergyout.member.model.dto.MemberEmailResponse;
 import com.allergyout.member.model.dto.MemberImgResponse;
@@ -42,6 +45,10 @@ class MemberServiceTest {
     private PasswordEncoder passwordEncoder;
     @Mock
     private S3Service s3Service;
+    @Mock
+    private TokenMapper tokenMapper;
+    @Mock
+    private CookieUtil cookieUtil;
 
     @InjectMocks
     private MemberService memberService;
@@ -337,6 +344,53 @@ class MemberServiceTest {
             when(memberMapper.getMember(MEMBER_NO)).thenReturn(null);
 
             assertThatThrownBy(() -> memberService.deleteMemberImg(MEMBER_NO))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(e -> ((CustomException) e).getErrorCode())
+                    .isEqualTo(ErrorCode.ENTITY_NOT_FOUND);
+        }
+    }
+
+    @Nested
+    @DisplayName("deleteMember (회원 탈퇴)")
+    class DeleteMember {
+
+        private final jakarta.servlet.http.HttpServletResponse response =
+                mock(jakarta.servlet.http.HttpServletResponse.class);
+
+        @Test
+        @DisplayName("비번 일치 시 소프트삭제 + 토큰 전체 폐기 + 쿠키 삭제")
+        void success() {
+            when(memberMapper.getMember(MEMBER_NO)).thenReturn(memberWithoutImg());
+            when(passwordEncoder.matches("qwer1234", ENCODED_PWD)).thenReturn(true);
+
+            memberService.deleteMember(MEMBER_NO, "qwer1234", response);
+
+            verify(memberMapper).updateMemberDelYn(MEMBER_NO);
+            verify(tokenMapper).deleteByMemberNo(MEMBER_NO);
+            verify(cookieUtil).deleteAuthCookies(response);
+        }
+
+        @Test
+        @DisplayName("비번 불일치면 PASSWORD_MISMATCH, 아무것도 하지 않는다")
+        void passwordMismatch() {
+            when(memberMapper.getMember(MEMBER_NO)).thenReturn(memberWithoutImg());
+            when(passwordEncoder.matches("wrong", ENCODED_PWD)).thenReturn(false);
+
+            assertThatThrownBy(() -> memberService.deleteMember(MEMBER_NO, "wrong", response))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(e -> ((CustomException) e).getErrorCode())
+                    .isEqualTo(ErrorCode.PASSWORD_MISMATCH);
+            verify(memberMapper, never()).updateMemberDelYn(any());
+            verify(tokenMapper, never()).deleteByMemberNo(any());
+            verify(cookieUtil, never()).deleteAuthCookies(any());
+        }
+
+        @Test
+        @DisplayName("회원이 없으면 ENTITY_NOT_FOUND")
+        void notFound() {
+            when(memberMapper.getMember(MEMBER_NO)).thenReturn(null);
+
+            assertThatThrownBy(() -> memberService.deleteMember(MEMBER_NO, "qwer1234", response))
                     .isInstanceOf(CustomException.class)
                     .extracting(e -> ((CustomException) e).getErrorCode())
                     .isEqualTo(ErrorCode.ENTITY_NOT_FOUND);

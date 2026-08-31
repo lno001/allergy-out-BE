@@ -24,7 +24,9 @@ public interface MemberMapper {
     void updateMemberPwd(Long memberNo, String memberPwd);
 
     void updateMemberImgPath(Long memberNo, String memberImgPath);
-    
+
+    void updateMemberDelYn(Long memberNo); // 회원 탈퇴 - 소프트 삭제(DEL_YN='Y')
+
 	void insertMember(Member member);
 
 	Optional<Member> findByMemberId(String memberId);
