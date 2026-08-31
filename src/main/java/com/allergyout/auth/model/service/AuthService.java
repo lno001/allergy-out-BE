@@ -24,11 +24,9 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class AuthService {
 
-    private final MemberMapper memberMapper;
-    private final TokenMapper tokenMapper;
-    private final JwtUtil jwtUtil;
-    private final CookieUtil cookieUtil;
-    private final PasswordEncoder passwordEncoder;
+	private final MemberMapper memberMapper;
+	private final TokenService tokenService;
+	private final PasswordEncoder passwordEncoder;
 
     @Transactional
     public void signup(SignupRequest request) {
@@ -62,48 +60,18 @@ public class AuthService {
             throw new CustomException(ErrorCode.UNAUTHORIZED);
         }
 
-        createAuthTokens(member, response);
+        tokenService.createAuthTokens(member, response);
         return toMemberLoginResponse(member);
     }
 
     @Transactional
     public void refreshToken(HttpServletRequest request, HttpServletResponse response) {
-        String refreshToken = cookieUtil.getCookie(request, CookieUtil.REFRESH_COOKIE);
-        if (refreshToken == null
-                || !jwtUtil.isValidToken(refreshToken)
-                || !"refresh".equals(jwtUtil.getTokenType(refreshToken))) {
-            cookieUtil.deleteAuthCookies(response);
-            throw new CustomException(ErrorCode.UNAUTHORIZED);
-        }
-
-        String jti = jwtUtil.getJti(refreshToken);
-        if (tokenMapper.countValidToken(jti, System.currentTimeMillis()) == 0) {
-            memberMapper.findByMemberId(jwtUtil.getSubject(refreshToken))
-                    .ifPresent(m -> tokenMapper.deleteByMemberNo(m.getMemberNo()));
-            cookieUtil.deleteAuthCookies(response);
-            throw new CustomException(ErrorCode.UNAUTHORIZED);
-        }
-
-        tokenMapper.deleteByToken(jti);
-
-        Member member = memberMapper.findByMemberId(jwtUtil.getSubject(refreshToken))
-                .orElseThrow(() -> new CustomException(ErrorCode.UNAUTHORIZED));
-        createAuthTokens(member, response);
+        tokenService.refreshToken(request, response);
     }
 
     @Transactional
     public void logout(HttpServletRequest request, HttpServletResponse response) {
-        String refreshToken = cookieUtil.getCookie(request, CookieUtil.REFRESH_COOKIE);
-        if (refreshToken != null && jwtUtil.isValidToken(refreshToken)) {
-            tokenMapper.deleteByToken(jwtUtil.getJti(refreshToken));
-        } else {
-            String accessToken = cookieUtil.getCookie(request, CookieUtil.ACCESS_COOKIE);
-            if (accessToken != null && jwtUtil.isValidToken(accessToken)) {
-                memberMapper.findByMemberId(jwtUtil.getSubject(accessToken))
-                        .ifPresent(m -> tokenMapper.deleteByMemberNo(m.getMemberNo()));
-            }
-        }
-        cookieUtil.deleteAuthCookies(response);
+        tokenService.deleteAuthTokens(request, response);
     }
 
     @Transactional(readOnly = true)
@@ -114,23 +82,6 @@ public class AuthService {
         Member member = memberMapper.findByMemberId(user.getMemberId())
                 .orElseThrow(() -> new CustomException(ErrorCode.UNAUTHORIZED));
         return toMemberLoginResponse(member);
-    }
-
-    private void createAuthTokens(Member member, HttpServletResponse response) {
-        tokenMapper.deleteByMemberNo(member.getMemberNo());
-
-        String accessToken = jwtUtil.createAccessToken(
-                member.getMemberId(), member.getMemberNo(), member.getRole());
-        String refreshToken = jwtUtil.createRefreshToken(
-                member.getMemberId(), member.getMemberNo());
-
-        tokenMapper.insertToken(
-                member.getMemberNo(),
-                jwtUtil.getJti(refreshToken),
-                jwtUtil.getExpiration(refreshToken).getTime());
-
-        cookieUtil.addAccessToken(response, accessToken);
-        cookieUtil.addRefreshToken(response, refreshToken);
     }
 
     private MemberLoginResponse toMemberLoginResponse(Member member) {
