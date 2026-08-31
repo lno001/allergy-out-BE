@@ -24,7 +24,8 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 public class S3Service {
 
     private static final long MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
-    private static final List<String> ALLOWED_EXTENSIONS = List.of("jpg", "jpeg", "png", "gif", "webp");
+    // 명세서([조리법] 등록): 이미지 형식은 PNG, JPG만 지원. (공용 변경 — 팀 승인됨)
+    private static final List<String> ALLOWED_EXTENSIONS = List.of("jpg", "jpeg", "png");
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyMMdd");
 
     private final S3Client s3Client;
