@@ -1,4 +1,4 @@
-package com.allergyout.favorite.model.vo;
+package com.allergyout.bookmark.model.vo;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -8,7 +8,7 @@ import lombok.Getter;
 @Getter
 @Builder
 @AllArgsConstructor
-public class Favorite {
+public class Bookmark {
 
     private final Long id;
 

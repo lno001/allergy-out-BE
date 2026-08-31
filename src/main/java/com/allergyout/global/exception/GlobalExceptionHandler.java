@@ -1,7 +1,6 @@
 package com.allergyout.global.exception;
 
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -13,6 +12,8 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+	
+	
 
     // 서비스 코드에서 직접 던지는 예외 (CustomException(ErrorCode.XXX))
     @ExceptionHandler(CustomException.class)
