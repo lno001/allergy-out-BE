@@ -2,27 +2,133 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.allergyout.member.model.dao.MemberMapper">
 
-    <select id="findByMemberId" resultType="com.allergyout.member.model.vo.Member">
-        SELECT
-            MEMBER_NO,
-            MEMBER_ID,
-            MEMBER_PWD,
-            MEMBER_NAME,
-            PHONE,
-            EMAIL,
-            MEMBER_IMG,
-            ROLE,
-            CREATE_DATE,
-            DEL_YN
-        FROM MEMBER
-        WHERE MEMBER_ID = #{memberId}
-          AND DEL_YN = 'N'
-    </select>
+	<select id="getMember" resultType="com.allergyout.member.model.vo.Member">
+	    SELECT MEMBER_NO,
+	    	   MEMBER_ID,
+	    	   MEMBER_PWD,
+	    	   MEMBER_NAME,
+	    	   PHONE,
+	    	   EMAIL,
+	           MEMBER_IMG,
+	           ROLE,
+	           CREATE_DATE,
+	           DEL_YN,
+	           MEMBER_IMG_PATH
+	      FROM
+	           MEMBER
+	     WHERE
+	           MEMBER_NO = #{memberNo}
+	       AND
+	           DEL_YN = 'N'
+	</select>
+
+
+	<select id="findByMemberId" resultType="com.allergyout.member.model.vo.Member">
+	    SELECT 
+	           MEMBER_NO,
+	           MEMBER_ID,
+	           MEMBER_PWD,
+	           MEMBER_NAME,
+	           PHONE,
+	           EMAIL,
+	           MEMBER_IMG_PATH,
+	           ROLE,
+	           CREATE_DATE,
+	           DEL_YN
+	      FROM 
+	           MEMBER
+	     WHERE 
+	           MEMBER_ID = #{memberId}
+	       AND 
+	           DEL_YN = 'N'
+	</select>
+	
+	<update id="updateMemberName">
+	    UPDATE 
+	    	   MEMBER
+	       SET 
+	           MEMBER_NAME = #{memberName}
+	     WHERE 
+	           MEMBER_NO = #{memberNo}
+	       AND 
+	           DEL_YN = 'N'
+	</update>
+	
+	<!-- DEL_YN 필터 안 함: UNIQUE(EMAIL) 제약은 탈퇴 회원 행에도 걸리므로, 
+	     실제 UPDATE 시 제약 충돌 여부와 동일한 기준으로 사전 검사해야 함 -->
+	<select id="existsByEmailExcludingSelf" resultType="boolean">
+	    SELECT 
+	           CASE WHEN COUNT(*) > 0 THEN 1 ELSE 0 END
+	      FROM 
+	           MEMBER
+	     WHERE 
+	           EMAIL = #{email}
+	       AND 
+	           MEMBER_NO != #{memberNo}
+	</select>
+	
+	<update id="updateMemberEmail">
+	    UPDATE 
+	           MEMBER
+	       SET 
+	           EMAIL = #{email}
+	     WHERE 
+	           MEMBER_NO = #{memberNo}
+	       AND 
+	           DEL_YN = 'N'
+	</update>
+	
+	<select id="existsByPhoneExcludingSelf" resultType="boolean">
+	    SELECT 
+	           CASE WHEN COUNT(*) > 0 THEN 1 ELSE 0 END
+	      FROM 
+	           MEMBER
+	     WHERE 
+	           PHONE = #{phone}
+	       AND 
+	           MEMBER_NO != #{memberNo}
+	</select>
+	
+	<update id="updateMemberPhone">
+	    UPDATE 
+	    	   MEMBER
+	       SET 
+	           PHONE = #{phone}
+	     WHERE 
+	           MEMBER_NO = #{memberNo}
+	       AND 
+	           DEL_YN = 'N'
+	</update>
+	
+	<update id="updateMemberPwd">
+	    UPDATE 
+	           MEMBER
+	       SET 
+	       	   MEMBER_PWD = #{memberPwd}
+	     WHERE 
+	           MEMBER_NO = #{memberNo}
+	       AND 
+	           DEL_YN = 'N'
+	</update>
+	
+	<update id="updateMemberImgPath">
+	    UPDATE 
+	           MEMBER
+	       SET 
+	           MEMBER_IMG_PATH = #{memberImgPath, jdbcType=VARCHAR}
+	     WHERE 
+	           MEMBER_NO = #{memberNo}
+	       AND 
+	           DEL_YN = 'N'
+	</update>
 
     <select id="existsByMemberId" resultType="boolean">
-        SELECT COUNT(*) > 0
-        FROM MEMBER
-        WHERE MEMBER_ID = #{memberId}
+        SELECT 
+        	   COUNT(*) > 0
+          FROM 
+               MEMBER
+         WHERE 
+               MEMBER_ID = #{memberId}
     </select>
 
     <insert id="insert" parameterType="com.allergyout.member.model.vo.Member">

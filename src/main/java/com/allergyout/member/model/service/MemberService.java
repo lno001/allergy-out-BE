@@ -1,6 +1,23 @@
 package com.allergyout.member.model.service;
 
+import java.net.URI;
+import java.util.Map;
+
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
+
+import com.allergyout.global.exception.CustomException;
+import com.allergyout.global.exception.ErrorCode;
+import com.allergyout.member.model.dao.MemberMapper;
+import com.allergyout.member.model.dto.MemberEmailResponse;
+import com.allergyout.member.model.dto.MemberImgResponse;
+import com.allergyout.member.model.dto.MemberNameResponse;
+import com.allergyout.member.model.dto.MemberPhoneResponse;
+import com.allergyout.member.model.dto.MemberResponse;
+import com.allergyout.member.model.vo.Member;
+import com.allergyout.s3.S3Service;
 
 import lombok.RequiredArgsConstructor;
 
@@ -8,4 +25,115 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class MemberService {
 
+    private static final String MEMBER_IMG_DIR = "members"; // S3 dirName, 하드코딩 상수(요청값 금지)
+
+    private final MemberMapper memberMapper;
+    private final PasswordEncoder passwordEncoder;
+    private final S3Service s3Service;
+
+    @Transactional(readOnly = true)
+    public MemberResponse getMember(Long memberNo) {
+        Member member = memberMapper.getMember(memberNo);
+        if (member == null) {
+            throw new CustomException(ErrorCode.ENTITY_NOT_FOUND);
+        }
+        return MemberResponse.from(member);
+    }
+
+    @Transactional
+    public MemberNameResponse updateMemberName(Long memberNo, String memberName) {
+        Member member = memberMapper.getMember(memberNo);
+        if (member == null) {
+            throw new CustomException(ErrorCode.ENTITY_NOT_FOUND);
+        }
+        memberMapper.updateMemberName(memberNo, memberName);
+        return new MemberNameResponse(memberName);
+    }
+
+    @Transactional
+    public MemberEmailResponse updateMemberEmail(Long memberNo, String email) {
+        Member member = memberMapper.getMember(memberNo);
+        if (member == null) {
+            throw new CustomException(ErrorCode.ENTITY_NOT_FOUND);
+        }
+        // TODO(인증번호 플로우 - 이번 스코프 제외): 이메일 변경 전 인증번호 발송·검증 필요.
+        //  별도 API(인증번호 발송/확인)와 저장소(코드·만료시각) 설계 후,
+        //  이 지점에서 "memberNo가 이 email에 대해 인증 완료 상태인지" 확인하고 아니면 CustomException 던질 것.
+        if (memberMapper.existsByEmailExcludingSelf(email, memberNo)) {
+            throw new CustomException(ErrorCode.DUPLICATE_VALUE, Map.of("email", "이미 사용 중인 이메일입니다."));
+        }
+        memberMapper.updateMemberEmail(memberNo, email);
+        return new MemberEmailResponse(email);
+    }
+
+    @Transactional
+    public MemberPhoneResponse updateMemberPhone(Long memberNo, String phone) {
+        Member member = memberMapper.getMember(memberNo);
+        if (member == null) {
+            throw new CustomException(ErrorCode.ENTITY_NOT_FOUND);
+        }
+        // TODO(인증번호 플로우 - 이번 스코프 제외): 연락처 변경 전 인증번호 발송·검증 필요.
+        //  별도 API(인증번호 발송/확인)와 저장소(코드·만료시각) 설계 후,
+        //  이 지점에서 "memberNo가 이 phone에 대해 인증 완료 상태인지" 확인하고 아니면 CustomException 던질 것.
+        if (memberMapper.existsByPhoneExcludingSelf(phone, memberNo)) {
+            throw new CustomException(ErrorCode.DUPLICATE_VALUE, Map.of("phone", "이미 사용 중인 연락처입니다."));
+        }
+        memberMapper.updateMemberPhone(memberNo, phone);
+        return new MemberPhoneResponse(phone);
+    }
+
+    @Transactional
+    public void updateMemberPwd(Long memberNo, String currentPassword, String newPassword) {
+        Member member = memberMapper.getMember(memberNo);
+        if (member == null) {
+            throw new CustomException(ErrorCode.ENTITY_NOT_FOUND);
+        }
+        if (!passwordEncoder.matches(currentPassword, member.getMemberPwd())) {
+            throw new CustomException(ErrorCode.PASSWORD_MISMATCH);
+        }
+        if (passwordEncoder.matches(newPassword, member.getMemberPwd())) {
+            throw new CustomException(ErrorCode.PASSWORD_SAME_AS_OLD);
+        }
+        memberMapper.updateMemberPwd(memberNo, passwordEncoder.encode(newPassword));
+    }
+
+    @Transactional
+    public MemberImgResponse updateMemberImg(Long memberNo, MultipartFile memberImg) {
+        Member member = memberMapper.getMember(memberNo);
+        if (member == null) {
+            throw new CustomException(ErrorCode.ENTITY_NOT_FOUND);
+        }
+        // 파일 없음/확장자/용량 검증은 S3Service.upload() 내부에서 처리(현재 INVALID_INPUT_VALUE).
+        //  명세서의 개별 메시지(파일 없음/확장자/용량)가 필요하면 S3Service(다른 담당)에서 세분화 ErrorCode로 교체 필요.
+        // 업로드 후 이 트랜잭션이 롤백되면 S3에 고아 파일이 남음 → 정리 로직은 별도 담당.
+        String newImgUrl = s3Service.upload(memberImg, MEMBER_IMG_DIR, memberNo);
+        memberMapper.updateMemberImgPath(memberNo, newImgUrl);
+        if (member.getMemberImgPath() != null) {
+            s3Service.delete(extractKey(member.getMemberImgPath()));
+        }
+        return new MemberImgResponse(newImgUrl);
+    }
+
+    @Transactional
+    public void deleteMemberImg(Long memberNo) {
+        Member member = memberMapper.getMember(memberNo);
+        if (member == null) {
+            throw new CustomException(ErrorCode.ENTITY_NOT_FOUND);
+        }
+        if (member.getMemberImgPath() == null) {
+            throw new CustomException(ErrorCode.IMAGE_ALREADY_DEFAULT);
+        }
+        memberMapper.updateMemberImgPath(memberNo, null);
+        s3Service.delete(extractKey(member.getMemberImgPath()));
+    }
+
+    // virtual-hosted-style URL(https://{bucket}.s3.{region}.amazonaws.com/{key})에서 key만 추출.
+    // recipe 쪽도 동일 로직이 필요해 보여 나중에 S3Service 공용 유틸로 옮기는 걸 별도 제안 예정, 우선 로컬.
+    private String extractKey(String imageUrl) {
+        try {
+            return URI.create(imageUrl).getPath().substring(1);
+        } catch (Exception e) {
+            throw new CustomException(ErrorCode.INTERNAL_SERVER_ERROR);
+        }
+    }
 }
