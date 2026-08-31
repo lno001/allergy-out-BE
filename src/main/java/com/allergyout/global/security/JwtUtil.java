@@ -1,6 +1,7 @@
 package com.allergyout.global.security;
 
 import java.util.Date;
+import java.util.UUID;
 
 import javax.crypto.SecretKey;
 
@@ -29,28 +30,45 @@ public class JwtUtil {
         this.refreshTokenValidity = refreshTokenValidity;
     }
 
-    public String createAccessToken(String subject) {
-        return createToken(subject, accessTokenValidity);
-    }
-
-    public String createRefreshToken(String subject) {
-        return createToken(subject, refreshTokenValidity);
-    }
-
-    private String createToken(String subject, long validityInMilliseconds) {
-        Date now = new Date();
-        Date expiry = new Date(now.getTime() + validityInMilliseconds);
-
+    public String createAccessToken(String memberId, Long memberNo, String role) {
         return Jwts.builder()
-                .subject(subject)
-                .issuedAt(now)
-                .expiration(expiry)
+                .subject(memberId)
+                .claim("memberNo", memberNo)
+                .claim("role", role)
+                .claim("typ", "access")
+                .id(UUID.randomUUID().toString())
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + accessTokenValidity))
                 .signWith(key)
                 .compact();
     }
 
+    public String createRefreshToken(String memberId, Long memberNo) {
+        return Jwts.builder()
+                .subject(memberId)
+                .claim("memberNo", memberNo)
+                .claim("typ", "refresh")
+                .id(UUID.randomUUID().toString()) // 이 값이 DB TOKEN.TOKEN 에 들어감
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + refreshTokenValidity))
+                .signWith(key)
+                .compact();
+    }
+
+    public String getJti(String token) {
+        return parseClaims(token).getId();
+    }
+
+    public String getTokenType(String token) {
+        return parseClaims(token).get("typ", String.class);
+    }
+    
+    public Date getExpiration(String token) {
+        return parseClaims(token).getExpiration();
+    }
+
     // 토큰이 유효한지(서명 일치 + 만료 안 됨) 검사
-    public boolean validateToken(String token) {
+    public boolean isValidToken(String token) {
         try {
             parseClaims(token);
             return true;

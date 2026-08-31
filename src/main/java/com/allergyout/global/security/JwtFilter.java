@@ -2,7 +2,6 @@ package com.allergyout.global.security;
 
 import java.io.IOException;
 
-import org.springframework.http.HttpHeaders;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -21,41 +20,36 @@ import lombok.RequiredArgsConstructor;
 public class JwtFilter extends OncePerRequestFilter {
 
     private final JwtUtil jwtUtil;
+    private final CookieUtil cookieUtil;
     private final UserDetailsService userDetailsService;
 
-    // 비회원도 접근 가능한 경로는 필터 자체를 안 타게 함
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String uri = request.getRequestURI();
-        String method = request.getMethod();
-
-        if ("GET".equals(method) && uri.startsWith("/api/recipes")) {
-            return true;
-        }
-        return uri.equals("/api/auth/signup") || uri.equals("/api/auth/login");
+        return uri.equals("/api/auth/signup")
+                || uri.equals("/api/auth/login")
+                || uri.equals("/api/auth/refresh")
+                || uri.equals("/api/auth/logout");
     }
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
-            throws ServletException, IOException {
+    protected void doFilterInternal(
+            HttpServletRequest request,
+            HttpServletResponse response,
+            FilterChain filterChain) throws ServletException, IOException {
 
-        String authorization = request.getHeader(HttpHeaders.AUTHORIZATION);
+        String token = cookieUtil.getCookie(request, CookieUtil.ACCESS_COOKIE);
 
-        if (authorization == null || !authorization.startsWith("Bearer ")) {
-            filterChain.doFilter(request, response);
-            return;
-        }
+        if (token != null
+                && jwtUtil.isValidToken(token)
+                && "access".equals(jwtUtil.getTokenType(token))) {
 
-        String token = authorization.substring(7);
-
-        if (jwtUtil.validateToken(token)) {
             String memberId = jwtUtil.getSubject(token);
             var userDetails = userDetailsService.loadUserByUsername(memberId);
 
             var authentication = new UsernamePasswordAuthenticationToken(
                     userDetails, null, userDetails.getAuthorities());
             authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-
             SecurityContextHolder.getContext().setAuthentication(authentication);
         }
 
