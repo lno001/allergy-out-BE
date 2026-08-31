@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.allergyout.auth.model.dao.TokenMapper">
+
+    <insert id="insertToken">
+	    INSERT INTO TOKEN (MEMBER_NO, TOKEN, EXPIRATION)
+	    VALUES (#{memberNo}, #{token}, #{expiration})
+	</insert>
+
+    <select id="countValidToken" resultType="int">
+        SELECT COUNT(*)
+          FROM TOKEN
+         WHERE TOKEN = #{token}
+           AND EXPIRATION > #{now}
+    </select>
+
+    <delete id="deleteByToken">
+        DELETE FROM TOKEN WHERE TOKEN = #{token}
+    </delete>
+
+    <delete id="deleteByMemberNo">
+        DELETE FROM TOKEN WHERE MEMBER_NO = #{memberNo}
+    </delete>
+</mapper>
