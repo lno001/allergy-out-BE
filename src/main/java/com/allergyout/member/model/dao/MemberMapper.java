@@ -9,9 +9,14 @@ import com.allergyout.member.model.vo.Member;
 @Mapper
 public interface MemberMapper {
 
-    Optional<Member> findByMemberId(String memberId);
+	void insertMember(Member member);
+
+	Optional<Member> findByMemberId(String memberId);
 
     boolean existsByMemberId(String memberId);
 
-    void insert(Member member);
+    boolean existsByEmail(String email);
+
+    boolean existsByPhone(String phone);
+
 }
