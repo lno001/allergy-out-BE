@@ -37,7 +37,7 @@ public class RecipeService {
 
     @Transactional
     public void createRecipe(RecipeCreateRequest request, MultipartFile mainImg, Long memberNo) {
-        validateCreateRequest(request, mainImg);
+    	validateRecipeCreateRequest(request, mainImg);
 
         // S3는 DB 트랜잭션 밖이라, 흐름 중 예외가 나면 catch에서 올린 파일을 수동으로 지운다.
         List<String> uploadedKeys = new ArrayList<>();
