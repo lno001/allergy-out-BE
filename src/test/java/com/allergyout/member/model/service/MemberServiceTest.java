@@ -156,6 +156,35 @@ class MemberServiceTest {
         }
 
         @Test
+        @DisplayName("대문자 이메일은 소문자로 정규화해 검사·저장·반환한다")
+        void normalizesToLowercase() {
+            when(memberMapper.getMember(MEMBER_NO)).thenReturn(memberWithoutImg());
+            when(memberMapper.existsByEmailExcludingSelf("new@test.com", MEMBER_NO)).thenReturn(false);
+
+            MemberEmailResponse result = memberService.updateMemberEmail(MEMBER_NO, "New@Test.COM");
+
+            assertThat(result.email()).isEqualTo("new@test.com");
+            verify(memberMapper).existsByEmailExcludingSelf("new@test.com", MEMBER_NO);
+            verify(memberMapper).updateMemberEmail(MEMBER_NO, "new@test.com");
+        }
+
+        @Test
+        @DisplayName("기존 이메일과 동일하면(대소문자 무시) INVALID_INPUT_VALUE, 중복검사·update 미호출")
+        void sameAsCurrent() {
+            when(memberMapper.getMember(MEMBER_NO)).thenReturn(memberWithoutImg()); // email = allergyout@gmail.com
+
+            assertThatThrownBy(() -> memberService.updateMemberEmail(MEMBER_NO, "ALLERGYOUT@Gmail.com"))
+                    .isInstanceOf(CustomException.class)
+                    .satisfies(ex -> {
+                        CustomException ce = (CustomException) ex;
+                        assertThat(ce.getErrorCode()).isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+                        assertThat(ce.getDetails()).containsExactly(entry("email", "기존 이메일과 동일합니다."));
+                    });
+            verify(memberMapper, never()).existsByEmailExcludingSelf(any(), any());
+            verify(memberMapper, never()).updateMemberEmail(any(), any());
+        }
+
+        @Test
         @DisplayName("다른 회원이 사용 중이면 DUPLICATE_VALUE + data{email}, update 미호출")
         void duplicated() {
             when(memberMapper.getMember(MEMBER_NO)).thenReturn(memberWithoutImg());
@@ -197,6 +226,22 @@ class MemberServiceTest {
 
             assertThat(result.phone()).isEqualTo("01099998888");
             verify(memberMapper).updateMemberPhone(MEMBER_NO, "01099998888");
+        }
+
+        @Test
+        @DisplayName("기존 연락처와 동일하면 INVALID_INPUT_VALUE, 중복검사·update 미호출")
+        void sameAsCurrent() {
+            when(memberMapper.getMember(MEMBER_NO)).thenReturn(memberWithoutImg()); // phone = 01012341234
+
+            assertThatThrownBy(() -> memberService.updateMemberPhone(MEMBER_NO, "01012341234"))
+                    .isInstanceOf(CustomException.class)
+                    .satisfies(ex -> {
+                        CustomException ce = (CustomException) ex;
+                        assertThat(ce.getErrorCode()).isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+                        assertThat(ce.getDetails()).containsExactly(entry("phone", "기존 연락처와 동일합니다."));
+                    });
+            verify(memberMapper, never()).existsByPhoneExcludingSelf(any(), any());
+            verify(memberMapper, never()).updateMemberPhone(any(), any());
         }
 
         @Test

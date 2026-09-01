@@ -1,20 +1,18 @@
 package com.allergyout.auth.model.service;
 
+import java.util.Locale;
 import java.util.Map;
 
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.allergyout.auth.model.dao.TokenMapper;
 import com.allergyout.auth.model.dto.LoginRequest;
 import com.allergyout.auth.model.dto.MemberLoginResponse;
 import com.allergyout.auth.model.dto.SignupRequest;
 import com.allergyout.global.exception.CustomException;
 import com.allergyout.global.exception.ErrorCode;
-import com.allergyout.global.security.CookieUtil;
 import com.allergyout.global.security.CustomUserDetails;
-import com.allergyout.global.security.JwtUtil;
 import com.allergyout.member.model.dao.MemberMapper;
 import com.allergyout.member.model.vo.Member;
 
@@ -32,10 +30,12 @@ public class AuthService {
 
     @Transactional
     public void signup(SignupRequest request) {
+        String email = request.email().toLowerCase(Locale.ROOT); // 이메일은 소문자로 정규화해 저장·비교
+
         if (memberMapper.existsByMemberId(request.memberId())) {
             throw new CustomException(ErrorCode.DUPLICATE_VALUE, Map.of("memberId", "이미 사용 중인 아이디입니다."));
         }
-        if (memberMapper.existsByEmail(request.email())) {
+        if (memberMapper.existsByEmail(email)) {
             throw new CustomException(ErrorCode.DUPLICATE_VALUE, Map.of("email", "이미 사용 중인 이메일입니다."));
         }
         if (memberMapper.existsByPhone(request.phone())) {
@@ -47,7 +47,7 @@ public class AuthService {
                 .memberPwd(passwordEncoder.encode(request.memberPwd()))
                 .memberName(request.memberName())
                 .phone(request.phone())
-                .email(request.email())
+                .email(email)
                 .build();
 
         memberMapper.insertMember(member);

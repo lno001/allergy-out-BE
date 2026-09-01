@@ -1,6 +1,7 @@
 package com.allergyout.member.model.service;
 
 import java.net.URI;
+import java.util.Locale;
 import java.util.Map;
 
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -57,18 +58,22 @@ public class MemberService {
 
     @Transactional
     public MemberEmailResponse updateMemberEmail(Long memberNo, String email) {
+        String normalizedEmail = email.toLowerCase(Locale.ROOT); // 이메일은 소문자로 정규화해 저장·비교
         Member member = memberMapper.getMember(memberNo);
         if (member == null) {
             throw new CustomException(ErrorCode.ENTITY_NOT_FOUND);
         }
+        if (normalizedEmail.equalsIgnoreCase(member.getEmail())) {
+            throw new CustomException(ErrorCode.INVALID_INPUT_VALUE, Map.of("email", "기존 이메일과 동일합니다."));
+        }
         // TODO(인증번호 플로우 - 이번 스코프 제외): 이메일 변경 전 인증번호 발송·검증 필요.
         //  별도 API(인증번호 발송/확인)와 저장소(코드·만료시각) 설계 후,
         //  이 지점에서 "memberNo가 이 email에 대해 인증 완료 상태인지" 확인하고 아니면 CustomException 던질 것.
-        if (memberMapper.existsByEmailExcludingSelf(email, memberNo)) {
+        if (memberMapper.existsByEmailExcludingSelf(normalizedEmail, memberNo)) {
             throw new CustomException(ErrorCode.DUPLICATE_VALUE, Map.of("email", "이미 사용 중인 이메일입니다."));
         }
-        memberMapper.updateMemberEmail(memberNo, email);
-        return new MemberEmailResponse(email);
+        memberMapper.updateMemberEmail(memberNo, normalizedEmail);
+        return new MemberEmailResponse(normalizedEmail);
     }
 
     @Transactional
@@ -76,6 +81,9 @@ public class MemberService {
         Member member = memberMapper.getMember(memberNo);
         if (member == null) {
             throw new CustomException(ErrorCode.ENTITY_NOT_FOUND);
+        }
+        if (phone.equals(member.getPhone())) {
+            throw new CustomException(ErrorCode.INVALID_INPUT_VALUE, Map.of("phone", "기존 연락처와 동일합니다."));
         }
         // TODO(인증번호 플로우 - 이번 스코프 제외): 연락처 변경 전 인증번호 발송·검증 필요.
         //  별도 API(인증번호 발송/확인)와 저장소(코드·만료시각) 설계 후,

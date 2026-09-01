@@ -30,12 +30,13 @@
            AND DEL_YN = 'N'
     </update>
 
-    <!-- DEL_YN 필터 안 함: UNIQUE(EMAIL) 제약은 탈퇴 회원 행에도 걸리므로,
-         실제 UPDATE 시 제약 충돌 여부와 동일한 기준으로 사전 검사해야 함 -->
+    <!-- EMAIL/PHONE UNIQUE 제약 제거됨 → 중복 여부는 활성 회원(DEL_YN='N')끼리만 앱에서 판정.
+         탈퇴 행(DEL_YN='Y')은 이메일/전화 재사용 허용 -->
     <select id="existsByEmailExcludingSelf" resultType="boolean">
         SELECT CASE WHEN COUNT(*) > 0 THEN 1 ELSE 0 END
           FROM MEMBER
          WHERE EMAIL = #{email}
+           AND DEL_YN = 'N'
            AND MEMBER_NO != #{memberNo}
     </select>
 
@@ -50,6 +51,7 @@
         SELECT CASE WHEN COUNT(*) > 0 THEN 1 ELSE 0 END
           FROM MEMBER
          WHERE PHONE = #{phone}
+           AND DEL_YN = 'N'
            AND MEMBER_NO != #{memberNo}
     </select>
 
@@ -127,16 +129,20 @@
          WHERE MEMBER_ID = #{memberId}
     </select>
 
+    <!-- EMAIL/PHONE UNIQUE 제약 제거됨 → 활성 회원(DEL_YN='N') 기준으로만 중복 판정.
+         탈퇴한 회원의 이메일/전화로는 재가입 허용 -->
     <select id="existsByEmail" resultType="boolean">
         SELECT CASE WHEN COUNT(*) > 0 THEN 1 ELSE 0 END
           FROM MEMBER
          WHERE EMAIL = #{email}
+           AND DEL_YN = 'N'
     </select>
 
     <select id="existsByPhone" resultType="boolean">
         SELECT CASE WHEN COUNT(*) > 0 THEN 1 ELSE 0 END
           FROM MEMBER
          WHERE PHONE = #{phone}
+           AND DEL_YN = 'N'
     </select>
 
 </mapper>
