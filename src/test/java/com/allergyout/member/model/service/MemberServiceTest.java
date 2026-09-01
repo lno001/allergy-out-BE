@@ -127,6 +127,21 @@ class MemberServiceTest {
         }
 
         @Test
+        @DisplayName("기존 이름과 동일하면 INVALID_INPUT_VALUE, update 미호출")
+        void sameAsCurrent() {
+            when(memberMapper.getMember(MEMBER_NO)).thenReturn(memberWithoutImg()); // memberName = 김민재
+
+            assertThatThrownBy(() -> memberService.updateMemberName(MEMBER_NO, "김민재"))
+                    .isInstanceOf(CustomException.class)
+                    .satisfies(ex -> {
+                        CustomException ce = (CustomException) ex;
+                        assertThat(ce.getErrorCode()).isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+                        assertThat(ce.getDetails()).containsExactly(entry("memberName", "기존 이름과 동일합니다."));
+                    });
+            verify(memberMapper, never()).updateMemberName(any(), any());
+        }
+
+        @Test
         @DisplayName("회원이 없으면 ENTITY_NOT_FOUND, 매퍼 update 미호출")
         void notFound() {
             when(memberMapper.getMember(MEMBER_NO)).thenReturn(null);

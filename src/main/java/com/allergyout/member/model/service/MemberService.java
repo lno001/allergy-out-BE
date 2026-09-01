@@ -52,6 +52,9 @@ public class MemberService {
         if (member == null) {
             throw new CustomException(ErrorCode.ENTITY_NOT_FOUND);
         }
+        if (memberName.equals(member.getMemberName())) {
+            throw new CustomException(ErrorCode.INVALID_INPUT_VALUE, Map.of("memberName", "기존 이름과 동일합니다."));
+        }
         memberMapper.updateMemberName(memberNo, memberName);
         return new MemberNameResponse(memberName);
     }
