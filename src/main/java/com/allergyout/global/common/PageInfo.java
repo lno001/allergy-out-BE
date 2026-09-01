@@ -1,5 +1,8 @@
 package com.allergyout.global.common;
 
+import com.allergyout.global.exception.CustomException;
+import com.allergyout.global.exception.ErrorCode;
+
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -21,6 +24,9 @@ public class PageInfo {
 	}
 
 	public void calculateTotalPage(int totalElements) {
+		if(this.size == 0) {
+			throw new CustomException(ErrorCode.INVALID_INPUT_VALUE);
+		}
 		this.totalElements = totalElements;
 		this.totalPages = (this.totalElements + this.size -1 ) / this.size;
 	}
