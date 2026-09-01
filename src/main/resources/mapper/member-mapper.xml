@@ -67,9 +67,11 @@
            AND DEL_YN = 'N'
     </update>
 
-    <update id="updateMemberImgPath">
+    <!-- MEMBER_IMG = 업로드 원본 파일명, MEMBER_IMG_PATH = S3 URL (삭제 시 둘 다 null) -->
+    <update id="updateMemberImg">
         UPDATE MEMBER
-           SET MEMBER_IMG_PATH = #{memberImgPath, jdbcType=VARCHAR}
+           SET MEMBER_IMG = #{memberImg, jdbcType=VARCHAR},
+               MEMBER_IMG_PATH = #{memberImgPath, jdbcType=VARCHAR}
          WHERE MEMBER_NO = #{memberNo}
            AND DEL_YN = 'N'
     </update>

@@ -1,4 +1,4 @@
 package com.allergyout.member.model.dto;
 
-// JSON 키는 명세서대로 'memberImg' (실제 소스는 MEMBER_IMG_PATH)
-public record MemberImgResponse(String memberImg) {}
+// 프로필 사진 수정 응답: S3 URL(MEMBER_IMG_PATH). GET 조회 응답과 키 이름 통일.
+public record MemberImgResponse(String memberImgPath) {}

@@ -112,7 +112,7 @@ public class MemberService {
         //  명세서의 개별 메시지(파일 없음/확장자/용량)가 필요하면 S3Service(다른 담당)에서 세분화 ErrorCode로 교체 필요.
         // 업로드 후 이 트랜잭션이 롤백되면 S3에 고아 파일이 남음 → 정리 로직은 별도 담당.
         String newImgUrl = s3Service.upload(memberImg, MEMBER_IMG_DIR, memberNo);
-        memberMapper.updateMemberImgPath(memberNo, newImgUrl);
+        memberMapper.updateMemberImg(memberNo, memberImg.getOriginalFilename(), newImgUrl);
         if (member.getMemberImgPath() != null) {
             s3Service.delete(extractKey(member.getMemberImgPath()));
         }
@@ -128,7 +128,7 @@ public class MemberService {
         if (member.getMemberImgPath() == null) {
             throw new CustomException(ErrorCode.IMAGE_ALREADY_DEFAULT);
         }
-        memberMapper.updateMemberImgPath(memberNo, null);
+        memberMapper.updateMemberImg(memberNo, null, null);
         s3Service.delete(extractKey(member.getMemberImgPath()));
     }
 

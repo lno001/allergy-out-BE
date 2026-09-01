@@ -276,10 +276,10 @@ class MemberServiceTest {
 
             MemberImgResponse result = memberService.updateMemberImg(MEMBER_NO, file);
 
-            assertThat(result.memberImg())
+            assertThat(result.memberImgPath())
                     .isEqualTo("https://bucket.s3.ap-northeast-2.amazonaws.com/members/1/new_260831.jpg");
-            verify(memberMapper).updateMemberImgPath(
-                    MEMBER_NO, "https://bucket.s3.ap-northeast-2.amazonaws.com/members/1/new_260831.jpg");
+            verify(memberMapper).updateMemberImg(
+                    MEMBER_NO, "photo.jpg", "https://bucket.s3.ap-northeast-2.amazonaws.com/members/1/new_260831.jpg");
             verify(s3Service, never()).delete(any());
         }
 
@@ -292,8 +292,8 @@ class MemberServiceTest {
 
             memberService.updateMemberImg(MEMBER_NO, file);
 
-            verify(memberMapper).updateMemberImgPath(
-                    MEMBER_NO, "https://bucket.s3.ap-northeast-2.amazonaws.com/members/1/new_260831.jpg");
+            verify(memberMapper).updateMemberImg(
+                    MEMBER_NO, "photo.jpg", "https://bucket.s3.ap-northeast-2.amazonaws.com/members/1/new_260831.jpg");
             verify(s3Service).delete("members/1/old_260830.jpg");
         }
 
@@ -321,7 +321,7 @@ class MemberServiceTest {
 
             memberService.deleteMemberImg(MEMBER_NO);
 
-            verify(memberMapper).updateMemberImgPath(MEMBER_NO, null);
+            verify(memberMapper).updateMemberImg(MEMBER_NO, null, null);
             verify(s3Service).delete("members/1/old_260830.jpg");
         }
 
@@ -334,7 +334,7 @@ class MemberServiceTest {
                     .isInstanceOf(CustomException.class)
                     .extracting(e -> ((CustomException) e).getErrorCode())
                     .isEqualTo(ErrorCode.IMAGE_ALREADY_DEFAULT);
-            verify(memberMapper, never()).updateMemberImgPath(any(), any());
+            verify(memberMapper, never()).updateMemberImg(any(), any(), any());
             verify(s3Service, never()).delete(any());
         }
 
