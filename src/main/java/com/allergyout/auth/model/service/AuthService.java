@@ -4,15 +4,12 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.allergyout.auth.model.dao.TokenMapper;
 import com.allergyout.auth.model.dto.LoginRequest;
 import com.allergyout.auth.model.dto.MemberLoginResponse;
 import com.allergyout.auth.model.dto.SignupRequest;
 import com.allergyout.global.exception.CustomException;
 import com.allergyout.global.exception.ErrorCode;
-import com.allergyout.global.security.CookieUtil;
 import com.allergyout.global.security.CustomUserDetails;
-import com.allergyout.global.security.JwtUtil;
 import com.allergyout.member.model.dao.MemberMapper;
 import com.allergyout.member.model.vo.Member;
 
@@ -60,13 +57,13 @@ public class AuthService {
             throw new CustomException(ErrorCode.UNAUTHORIZED);
         }
 
-        tokenService.createAuthTokens(member, response);
-        return toMemberLoginResponse(member);
+        String accessToken = tokenService.createAuthTokens(member, response);
+        return toMemberLoginResponse(accessToken, member);
     }
 
     @Transactional
-    public void refreshToken(HttpServletRequest request, HttpServletResponse response) {
-        tokenService.refreshToken(request, response);
+    public String refreshToken(HttpServletRequest request, HttpServletResponse response) {
+        return tokenService.refreshToken(request, response);
     }
 
     @Transactional
@@ -84,12 +81,17 @@ public class AuthService {
         return toMemberLoginResponse(member);
     }
 
-    private MemberLoginResponse toMemberLoginResponse(Member member) {
+    private MemberLoginResponse toMemberLoginResponse(String accessToken, Member member) {
         return new MemberLoginResponse(
+                accessToken,
                 member.getMemberNo(),
                 member.getMemberId(),
                 member.getMemberName(),
                 member.getRole(),
                 member.getMemberImg());
+    }
+    
+    private MemberLoginResponse toMemberLoginResponse(Member member) {
+        return toMemberLoginResponse(null, member);
     }
 }

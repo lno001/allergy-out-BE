@@ -25,7 +25,7 @@ public class TokenService {
     private final CookieUtil cookieUtil;
 
     @Transactional
-    public void createAuthTokens(Member member, HttpServletResponse response) {
+    public String createAuthTokens(Member member, HttpServletResponse response) {
         tokenMapper.deleteByMemberNo(member.getMemberNo());
 
         String accessToken = jwtUtil.createAccessToken(
@@ -38,12 +38,12 @@ public class TokenService {
                 jwtUtil.getJti(refreshToken),
                 jwtUtil.getExpiration(refreshToken).getTime());
 
-        cookieUtil.addAccessToken(response, accessToken);
         cookieUtil.addRefreshToken(response, refreshToken);
+        return accessToken;
     }
 
     @Transactional
-    public void refreshToken(HttpServletRequest request, HttpServletResponse response) {
+    public String refreshToken(HttpServletRequest request, HttpServletResponse response) {
         String refreshToken = cookieUtil.getCookie(request, CookieUtil.REFRESH_COOKIE);
         if (refreshToken == null
                 || !jwtUtil.isValidToken(refreshToken)
@@ -65,7 +65,7 @@ public class TokenService {
             rejectRefresh(response);
         }
 
-        createAuthTokens(member, response);
+        return createAuthTokens(member, response);
     }
 
     @Transactional
@@ -73,12 +73,6 @@ public class TokenService {
         String refreshToken = cookieUtil.getCookie(request, CookieUtil.REFRESH_COOKIE);
         if (refreshToken != null && jwtUtil.isValidToken(refreshToken)) {
             tokenMapper.deleteByToken(jwtUtil.getJti(refreshToken));
-        } else {
-            String accessToken = cookieUtil.getCookie(request, CookieUtil.ACCESS_COOKIE);
-            if (accessToken != null && jwtUtil.isValidToken(accessToken)) {
-                memberMapper.findByMemberId(jwtUtil.getSubject(accessToken))
-                        .ifPresent(m -> tokenMapper.deleteByMemberNo(m.getMemberNo()));
-            }
         }
         cookieUtil.deleteAuthCookies(response);
     }
