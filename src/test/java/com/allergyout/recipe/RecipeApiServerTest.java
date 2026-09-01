@@ -35,7 +35,6 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
-import com.allergyout.global.security.CookieUtil;
 import com.allergyout.global.security.JwtUtil;
 import com.allergyout.member.model.dao.MemberMapper;
 import com.allergyout.member.model.vo.Member;
@@ -65,7 +64,7 @@ class RecipeApiServerTest {
     @Autowired JwtUtil jwtUtil;
 
     private RestClient client;
-    private String cookieHeader;   // "accessToken=<jwt>" — 현재 인증은 헤더가 아니라 HttpOnly 쿠키
+    private String bearer;   // "Bearer <jwt>" — accessToken 은 헤더로 전달 (refreshToken 만 쿠키)
 
     @BeforeEach
     void setUp() throws Exception {
@@ -81,7 +80,7 @@ class RecipeApiServerTest {
                 .memberName("테스터").role("ROLE_USER").delYn("N").build();
         lenient().when(memberMapper.findByMemberId("tester")).thenReturn(Optional.of(member));
 
-        cookieHeader = CookieUtil.ACCESS_COOKIE + "=" + jwtUtil.createAccessToken("tester", 42L, "ROLE_USER");
+        bearer = "Bearer " + jwtUtil.createAccessToken("tester", 42L, "ROLE_USER");
     }
 
     private ByteArrayResource file(String filename) {
@@ -109,6 +108,9 @@ class RecipeApiServerTest {
         return b;
     }
 
+    // 해피패스 end-to-end: 실제 톰캣 + 실제 HTTP multipart + 실제 JwtFilter 인증을 통과해
+    // 컨트롤러→서비스까지 도달하고, 서비스가 매퍼에 넘기는 값(인증 memberNo, 재료 2건, 스텝 이미지 URL/원본명)이
+    // 요청 그대로인지 확인. 단위 테스트가 못 잡는 "프레임워크 배선"까지 검증.
     @Test
     @DisplayName("실서버 multipart POST /api/recipes → 201, 인증 memberNo·중첩 리스트·스텝 파일 전부 정상 바인딩")
     void createRecipe_realServer() {
@@ -121,7 +123,7 @@ class RecipeApiServerTest {
         }).when(recipeMapper).insertRecipe(any());
 
         var res = client.post().uri("/api/recipes")
-                .header(HttpHeaders.COOKIE, cookieHeader)
+                .header(HttpHeaders.AUTHORIZATION, bearer)
                 .contentType(MediaType.MULTIPART_FORM_DATA)
                 .body(body(true).build())
                 .retrieve()
@@ -150,6 +152,8 @@ class RecipeApiServerTest {
         assertThat(stepCap.getAllValues().get(1).getStepImgPath()).isNull();
     }
 
+    // 인가: Authorization 헤더 없이 오면 SecurityConfig 의 .authenticated() 규칙에 걸려
+    // 컨트롤러/서비스에 도달하지 못하고 4xx(401)로 끊기는지. 비로그인 등록 차단.
     @Test
     @DisplayName("실서버: 토큰 없이 요청 → 401/403, 서비스 미호출")
     void createRecipe_noToken() {
@@ -165,6 +169,8 @@ class RecipeApiServerTest {
         Mockito.verifyNoInteractions(s3Service);
     }
 
+    // 보상 삭제 end-to-end: RECIPES INSERT 뒤 insertMaterial 이 터지면 @Transactional 이 DB 를 롤백하고,
+    // catch 의 deleteQuietly 가 이미 올린 대표 이미지를 S3 에서 지우는지 (응답은 500).
     @Test
     @DisplayName("실서버: 중간 실패 시 업로드된 S3 파일 보상 삭제")
     void createRecipe_midFailure_compensates() {
@@ -179,7 +185,7 @@ class RecipeApiServerTest {
 
         try {
             client.post().uri("/api/recipes")
-                    .header(HttpHeaders.COOKIE, cookieHeader)
+                    .header(HttpHeaders.AUTHORIZATION, bearer)
                     .contentType(MediaType.MULTIPART_FORM_DATA)
                     .body(body(false).build())
                     .retrieve().toBodilessEntity();

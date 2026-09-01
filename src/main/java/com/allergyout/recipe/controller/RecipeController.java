@@ -26,7 +26,7 @@ public class RecipeController {
     private final RecipeService recipeService;
 
     // POST /api/recipes  (multipart/form-data) — 인증 필요, 작성자 = 로그인한 memberNo
-    // 텍스트/리스트 필드와 스텝 이미지(STEP_LIST[i].STEP_IMG)는 @ModelAttribute DTO로,
+    // 텍스트/리스트 필드와 스텝 이미지(stepList[i].stepImg)는 @ModelAttribute DTO로,
     // 대표 이미지(RECIPE_MAIN_IMG)만 @RequestParam으로 분리해서 받는다.
     @PostMapping
     public ResponseEntity<ApiResponse<Void>> createRecipe(

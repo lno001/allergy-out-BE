@@ -3,6 +3,7 @@
 <mapper namespace="com.allergyout.recipe.model.dao.RecipeMapper">
 
     <!-- PK·CREATE_DATE는 INSERT 컬럼에 넣지 않음 (IDENTITY / DB default). 생성된 RECIPE_NO는 recipeNo로 되받음 -->
+    <!-- useGeneratedKeys: -->
     <insert id="insertRecipe" parameterType="map"
             useGeneratedKeys="true" keyProperty="recipeNo" keyColumn="RECIPE_NO">
         INSERT 
