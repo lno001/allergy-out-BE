@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.allergyout.auth.model.dto.AccessTokenResponse;
 import com.allergyout.auth.model.dto.LoginRequest;
 import com.allergyout.auth.model.dto.MemberLoginResponse;
 import com.allergyout.auth.model.dto.SignupRequest;
@@ -43,11 +44,12 @@ public class AuthController {
     }
 
     @PostMapping("/refresh")
-    public ResponseEntity<ApiResponse<Void>> refreshToken(
+    public ResponseEntity<ApiResponse<AccessTokenResponse>> refreshToken(
             HttpServletRequest request,
             HttpServletResponse response) {
-        authService.refreshToken(request, response);
-        return ResponseEntity.ok(ApiResponse.success("토큰 재발급", null));
+        String accessToken = authService.refreshToken(request, response);
+        return ResponseEntity.ok(
+                ApiResponse.success("토큰 재발급", new AccessTokenResponse(accessToken)));
     }
 
     @PostMapping("/logout")
