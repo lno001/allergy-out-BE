@@ -39,19 +39,12 @@ public class MemberService {
 
     @Transactional(readOnly = true)
     public MemberResponse getMember(Long memberNo) {
-        Member member = memberMapper.getMember(memberNo);
-        if (member == null) {
-            throw new CustomException(ErrorCode.ENTITY_NOT_FOUND);
-        }
-        return MemberResponse.from(member);
+        return MemberResponse.from(getMemberByNo(memberNo));
     }
 
     @Transactional
     public MemberNameResponse updateMemberName(Long memberNo, String memberName) {
-        Member member = memberMapper.getMember(memberNo);
-        if (member == null) {
-            throw new CustomException(ErrorCode.ENTITY_NOT_FOUND);
-        }
+        Member member = getMemberByNo(memberNo);
         if (memberName.equals(member.getMemberName())) {
             throw new CustomException(ErrorCode.INVALID_INPUT_VALUE, Map.of("memberName", "기존 이름과 동일합니다."));
         }
@@ -62,10 +55,7 @@ public class MemberService {
     @Transactional
     public MemberEmailResponse updateMemberEmail(Long memberNo, String email) {
         String normalizedEmail = email.toLowerCase(Locale.ROOT); // 이메일은 소문자로 정규화해 저장·비교
-        Member member = memberMapper.getMember(memberNo);
-        if (member == null) {
-            throw new CustomException(ErrorCode.ENTITY_NOT_FOUND);
-        }
+        Member member = getMemberByNo(memberNo);
         if (normalizedEmail.equalsIgnoreCase(member.getEmail())) {
             throw new CustomException(ErrorCode.INVALID_INPUT_VALUE, Map.of("email", "기존 이메일과 동일합니다."));
         }
@@ -81,10 +71,7 @@ public class MemberService {
 
     @Transactional
     public MemberPhoneResponse updateMemberPhone(Long memberNo, String phone) {
-        Member member = memberMapper.getMember(memberNo);
-        if (member == null) {
-            throw new CustomException(ErrorCode.ENTITY_NOT_FOUND);
-        }
+        Member member = getMemberByNo(memberNo);
         if (phone.equals(member.getPhone())) {
             throw new CustomException(ErrorCode.INVALID_INPUT_VALUE, Map.of("phone", "기존 연락처와 동일합니다."));
         }
@@ -100,10 +87,7 @@ public class MemberService {
 
     @Transactional
     public void updateMemberPwd(Long memberNo, String currentPassword, String newPassword) {
-        Member member = memberMapper.getMember(memberNo);
-        if (member == null) {
-            throw new CustomException(ErrorCode.ENTITY_NOT_FOUND);
-        }
+        Member member = getMemberByNo(memberNo);
         if (!passwordEncoder.matches(currentPassword, member.getMemberPwd())) {
             throw new CustomException(ErrorCode.PASSWORD_MISMATCH);
         }
@@ -115,10 +99,7 @@ public class MemberService {
 
     @Transactional
     public MemberImgResponse updateMemberImg(Long memberNo, MultipartFile memberImg) {
-        Member member = memberMapper.getMember(memberNo);
-        if (member == null) {
-            throw new CustomException(ErrorCode.ENTITY_NOT_FOUND);
-        }
+        Member member = getMemberByNo(memberNo);
         // 파일 없음/확장자/용량 검증은 S3Service.upload() 내부에서 처리(현재 INVALID_INPUT_VALUE).
         //  명세서의 개별 메시지(파일 없음/확장자/용량)가 필요하면 S3Service(다른 담당)에서 세분화 ErrorCode로 교체 필요.
         // 업로드 후 이 트랜잭션이 롤백되면 S3에 고아 파일이 남음 → 정리 로직은 별도 담당.
@@ -132,10 +113,7 @@ public class MemberService {
 
     @Transactional
     public void deleteMemberImg(Long memberNo) {
-        Member member = memberMapper.getMember(memberNo);
-        if (member == null) {
-            throw new CustomException(ErrorCode.ENTITY_NOT_FOUND);
-        }
+        Member member = getMemberByNo(memberNo);
         if (member.getMemberImgPath() == null) {
             throw new CustomException(ErrorCode.IMAGE_ALREADY_DEFAULT);
         }
@@ -146,16 +124,22 @@ public class MemberService {
     // 회원 탈퇴: 본인 확인(비밀번호) → 소프트 삭제 → 모든 세션 토큰 폐기 + 이 브라우저 쿠키 삭제
     @Transactional
     public void deleteMember(Long memberNo, String memberPwd, HttpServletResponse response) {
-        Member member = memberMapper.getMember(memberNo);
-        if (member == null) {
-            throw new CustomException(ErrorCode.ENTITY_NOT_FOUND);
-        }
+        Member member = getMemberByNo(memberNo);
         if (!passwordEncoder.matches(memberPwd, member.getMemberPwd())) {
             throw new CustomException(ErrorCode.PASSWORD_MISMATCH);
         }
         memberMapper.updateMemberDelYn(memberNo);   // DEL_YN = 'Y'
         tokenMapper.deleteByMemberNo(memberNo);     // 그 회원의 리프레시 토큰 전부 삭제 (로그아웃은 현재 1개만)
-        cookieUtil.deleteAuthCookies(response);     // access/refresh 쿠키 Max-Age=0
+        cookieUtil.deleteAuthCookies(response);     // refresh 쿠키 Max-Age=0 (access는 Bearer 헤더라 서버가 못 지움 → FE가 폐기)
+    }
+
+    // 회원 조회. 없으면(매퍼가 DEL_YN='N' 로 걸러 null) ENTITY_NOT_FOUND.
+    private Member getMemberByNo(Long memberNo) {
+        Member member = memberMapper.getMember(memberNo);
+        if (member == null) {
+            throw new CustomException(ErrorCode.ENTITY_NOT_FOUND);
+        }
+        return member;
     }
 
     // virtual-hosted-style URL(https://{bucket}.s3.{region}.amazonaws.com/{key})에서 key만 추출.
