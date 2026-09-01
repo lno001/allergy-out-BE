@@ -1,148 +1,59 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+		"https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.allergyout.member.model.dao.MemberMapper">
 
-    <!-- ============================================================
-         member 마이페이지
-         ============================================================ -->
-
-    <select id="getMember" resultType="com.allergyout.member.model.vo.Member">
-        SELECT MEMBER_NO,
-               MEMBER_ID,
-               MEMBER_PWD,
-               MEMBER_NAME,
-               PHONE,
-               EMAIL,
-               MEMBER_IMG,
-               ROLE,
-               CREATE_DATE,
-               DEL_YN,
-               MEMBER_IMG_PATH
-          FROM MEMBER
-         WHERE MEMBER_NO = #{memberNo}
-           AND DEL_YN = 'N'
-    </select>
-
-    <update id="updateMemberName">
-        UPDATE MEMBER
-           SET MEMBER_NAME = #{memberName}
-         WHERE MEMBER_NO = #{memberNo}
-           AND DEL_YN = 'N'
-    </update>
-
-    <!-- EMAIL/PHONE UNIQUE 제약 제거됨 → 중복 여부는 활성 회원(DEL_YN='N')끼리만 앱에서 판정.
-         탈퇴 행(DEL_YN='Y')은 이메일/전화 재사용 허용 -->
-    <select id="existsByEmailExcludingSelf" resultType="boolean">
-        SELECT CASE WHEN COUNT(*) > 0 THEN 1 ELSE 0 END
-          FROM MEMBER
-         WHERE EMAIL = #{email}
-           AND DEL_YN = 'N'
-           AND MEMBER_NO != #{memberNo}
-    </select>
-
-    <update id="updateMemberEmail">
-        UPDATE MEMBER
-           SET EMAIL = #{email}
-         WHERE MEMBER_NO = #{memberNo}
-           AND DEL_YN = 'N'
-    </update>
-
-    <select id="existsByPhoneExcludingSelf" resultType="boolean">
-        SELECT CASE WHEN COUNT(*) > 0 THEN 1 ELSE 0 END
-          FROM MEMBER
-         WHERE PHONE = #{phone}
-           AND DEL_YN = 'N'
-           AND MEMBER_NO != #{memberNo}
-    </select>
-
-    <update id="updateMemberPhone">
-        UPDATE MEMBER
-           SET PHONE = #{phone}
-         WHERE MEMBER_NO = #{memberNo}
-           AND DEL_YN = 'N'
-    </update>
-
-    <update id="updateMemberPwd">
-        UPDATE MEMBER
-           SET MEMBER_PWD = #{memberPwd}
-         WHERE MEMBER_NO = #{memberNo}
-           AND DEL_YN = 'N'
-    </update>
-
-    <!-- MEMBER_IMG = 업로드 원본 파일명, MEMBER_IMG_PATH = S3 URL (삭제 시 둘 다 null) -->
-    <update id="updateMemberImg">
-        UPDATE MEMBER
-           SET MEMBER_IMG = #{memberImg, jdbcType=VARCHAR},
-               MEMBER_IMG_PATH = #{memberImgPath, jdbcType=VARCHAR}
-         WHERE MEMBER_NO = #{memberNo}
-           AND DEL_YN = 'N'
-    </update>
-
-    <!-- 회원 탈퇴 - 소프트 삭제 -->
-    <update id="updateMemberDelYn">
-        UPDATE MEMBER
-           SET DEL_YN = 'Y'
-         WHERE MEMBER_NO = #{memberNo}
-           AND DEL_YN = 'N'
-    </update>
-
-    <!-- ============================================================
-         auth (로그인/회원가입) - auth 브랜치 병합분
-         ============================================================ -->
-
-    <insert id="insertMember">
-        INSERT INTO MEMBER (
-            MEMBER_ID,
-            MEMBER_PWD,
-            MEMBER_NAME,
-            PHONE,
-            EMAIL
-        ) VALUES (
-            #{memberId},
-            #{memberPwd},
-            #{memberName},
-            #{phone},
-            #{email}
-        )
-    </insert>
+	<insert id="insertMember">
+	    INSERT INTO MEMBER (
+	        MEMBER_ID,
+	        MEMBER_PWD,
+	        MEMBER_NAME,
+	        PHONE,
+	        EMAIL
+	    ) VALUES (
+	        #{memberId},
+	        #{memberPwd},
+	        #{memberName},
+	        #{phone},
+	        #{email}
+	    )
+	</insert>
 
     <select id="findByMemberId" resultType="com.allergyout.member.model.vo.Member">
-        SELECT MEMBER_NO,
-               MEMBER_ID,
-               MEMBER_PWD,
-               MEMBER_NAME,
-               PHONE,
-               EMAIL,
-               MEMBER_IMG,
-               ROLE,
-               CREATE_DATE,
-               DEL_YN,
-               MEMBER_IMG_PATH
-          FROM MEMBER
-         WHERE MEMBER_ID = #{memberId}
-           AND DEL_YN = 'N'
-    </select>
+	    SELECT MEMBER_NO,
+	           MEMBER_ID,
+	           MEMBER_PWD,
+	           MEMBER_NAME,
+	           PHONE,
+	           EMAIL,
+	           MEMBER_IMG,
+	           ROLE,
+	           CREATE_DATE,
+	           DEL_YN,
+	           MEMBER_IMG_PATH
+	      FROM MEMBER
+	     WHERE MEMBER_ID = #{memberId}
+	       AND DEL_YN = 'N'
+	</select>
 
-    <select id="existsByMemberId" resultType="boolean">
-        SELECT CASE WHEN COUNT(*) > 0 THEN 1 ELSE 0 END
-          FROM MEMBER
-         WHERE MEMBER_ID = #{memberId}
-    </select>
-
-    <!-- EMAIL/PHONE UNIQUE 제약 제거됨 → 활성 회원(DEL_YN='N') 기준으로만 중복 판정.
-         탈퇴한 회원의 이메일/전화로는 재가입 허용 -->
-    <select id="existsByEmail" resultType="boolean">
-        SELECT CASE WHEN COUNT(*) > 0 THEN 1 ELSE 0 END
-          FROM MEMBER
-         WHERE EMAIL = #{email}
-           AND DEL_YN = 'N'
-    </select>
-
-    <select id="existsByPhone" resultType="boolean">
-        SELECT CASE WHEN COUNT(*) > 0 THEN 1 ELSE 0 END
-          FROM MEMBER
-         WHERE PHONE = #{phone}
-           AND DEL_YN = 'N'
-    </select>
+	<select id="isDuplicateMemberId" resultType="boolean">
+	    SELECT COUNT(*)
+	      FROM MEMBER
+	     WHERE MEMBER_ID = #{memberId}
+	</select>
+	
+	<select id="isDuplicateEmail" resultType="boolean">	
+	    SELECT COUNT(*)
+	      FROM MEMBER
+	     WHERE EMAIL = #{email}
+	       AND DEL_YN = 'N'
+	</select>
+	
+	<select id="isDuplicatePhone" resultType="boolean">
+	    SELECT COUNT(*)
+	      FROM MEMBER
+	     WHERE PHONE = #{phone}
+	       AND DEL_YN = 'N'
+	</select>
 
 </mapper>
