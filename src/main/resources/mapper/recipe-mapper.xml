@@ -2,4 +2,67 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.allergyout.recipe.model.dao.RecipeMapper">
 
+    <!-- PK·CREATE_DATE는 INSERT 컬럼에 넣지 않음 (IDENTITY / DB default). 생성된 RECIPE_NO는 recipeNo로 되받음 -->
+    <!-- useGeneratedKeys: -->
+    <insert id="insertRecipe" parameterType="map"
+            useGeneratedKeys="true" keyProperty="recipeNo" keyColumn="RECIPE_NO">
+        INSERT 
+          INTO 
+          		RECIPES 
+          		(
+            	MEMBER_NO
+             ,  RECIPE_TITLE
+             ,  RECIPE_INFO
+             ,  RECIPE_MAIN_IMG
+             ,  RECIPES_IMG_PATH
+                ) 
+        VALUES 
+        		(
+            	#{memberNo}
+             ,  #{recipeTitle}
+             ,  #{recipeInfo}
+             ,  #{recipeMainImg}
+             ,  #{recipesImgPath}
+             	)
+    </insert>
+
+    <insert id="insertMaterial">
+        INSERT
+          INTO 
+             	MATERIAL 
+             	(
+				RECIPE_NO
+			 ,  MATERIAL_NAME
+			 ,  AMOUNT
+			    ) 
+	    VALUES 
+	        	(
+				#{recipeNo}
+			 ,  #{materialName}
+			 ,  #{amount}
+			    )
+    </insert>
+
+    <!-- 스텝 이미지 없는 단계는 stepImg/stepImgPath 가 null 로 들어감 (STEP_IMG·STEP_IMG_PATH 는 NULL 허용) -->
+    <insert id="insertRecipeStep">
+        INSERT
+          INTO
+             	RECIPE_STEPS
+             	(
+				RECIPE_NO
+			 ,  STEP_INFO
+			 ,  STEP_IMG
+			 ,  STEP_ORDER
+			 ,  STEP_IMG_PATH
+			    )
+	    VALUES
+	        	(
+				#{recipeNo}
+			 ,  #{stepInfo}
+			 ,  #{stepImg}
+			 ,  #{stepOrder}
+			 ,  #{stepImgPath}
+			    )
+    </insert>
+
 </mapper>

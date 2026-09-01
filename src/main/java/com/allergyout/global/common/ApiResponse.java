@@ -23,7 +23,6 @@ public class ApiResponse<T> {
         return new ApiResponse<>(code, msg, null);
     }
 
-    // 실패 응답에 상세를 실을 때 (예: 검증 실패 필드별 메시지 {필드: 메시지})
     public static <T> ApiResponse<T> fail(int code, String msg, T data) {
         return new ApiResponse<>(code, msg, data);
     }
