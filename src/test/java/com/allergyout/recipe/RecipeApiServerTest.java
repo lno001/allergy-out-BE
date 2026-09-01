@@ -35,6 +35,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
+import com.allergyout.global.security.CookieUtil;
 import com.allergyout.global.security.JwtUtil;
 import com.allergyout.member.model.dao.MemberMapper;
 import com.allergyout.member.model.vo.Member;
@@ -64,7 +65,7 @@ class RecipeApiServerTest {
     @Autowired JwtUtil jwtUtil;
 
     private RestClient client;
-    private String bearer;
+    private String cookieHeader;   // "accessToken=<jwt>" — 현재 인증은 헤더가 아니라 HttpOnly 쿠키
 
     @BeforeEach
     void setUp() throws Exception {
@@ -80,7 +81,7 @@ class RecipeApiServerTest {
                 .memberName("테스터").role("ROLE_USER").delYn("N").build();
         lenient().when(memberMapper.findByMemberId("tester")).thenReturn(Optional.of(member));
 
-        bearer = "Bearer " + jwtUtil.createAccessToken("tester");
+        cookieHeader = CookieUtil.ACCESS_COOKIE + "=" + jwtUtil.createAccessToken("tester", 42L, "ROLE_USER");
     }
 
     private ByteArrayResource file(String filename) {
@@ -91,20 +92,20 @@ class RecipeApiServerTest {
 
     private MultipartBodyBuilder body(boolean withStep0Img) {
         MultipartBodyBuilder b = new MultipartBodyBuilder();
-        b.part("RECIPE_TITLE", "된장국");
-        b.part("RECIPE_INFO", "나트륨을 줄인 된장국");
+        b.part("recipeTitle", "된장국");
+        b.part("recipeInfo", "나트륨을 줄인 된장국");
         b.part("RECIPE_MAIN_IMG", file("main.jpg")).contentType(MediaType.IMAGE_JPEG);
-        b.part("MATERIAL_LIST[0].MATERIAL_NAME", "두부");
-        b.part("MATERIAL_LIST[0].AMOUNT", "20g(2×2×2cm)");
-        b.part("MATERIAL_LIST[1].MATERIAL_NAME", "감자");
-        b.part("MATERIAL_LIST[1].AMOUNT", "10g");
-        b.part("STEP_LIST[0].STEP_ORDER", "1");
-        b.part("STEP_LIST[0].STEP_INFO", "감자, 양파는 얇게 썬다");
+        b.part("materialList[0].materialName", "두부");
+        b.part("materialList[0].amount", "20g(2×2×2cm)");
+        b.part("materialList[1].materialName", "감자");
+        b.part("materialList[1].amount", "10g");
+        b.part("stepList[0].stepOrder", "1");
+        b.part("stepList[0].stepInfo", "감자, 양파는 얇게 썬다");
         if (withStep0Img) {
-            b.part("STEP_LIST[0].STEP_IMG", file("s0.jpg")).contentType(MediaType.IMAGE_JPEG);
+            b.part("stepList[0].stepImg", file("s0.jpg")).contentType(MediaType.IMAGE_JPEG);
         }
-        b.part("STEP_LIST[1].STEP_ORDER", "2");
-        b.part("STEP_LIST[1].STEP_INFO", "냄비에 넣고 끓인다");
+        b.part("stepList[1].stepOrder", "2");
+        b.part("stepList[1].stepInfo", "냄비에 넣고 끓인다");
         return b;
     }
 
@@ -120,7 +121,7 @@ class RecipeApiServerTest {
         }).when(recipeMapper).insertRecipe(any());
 
         var res = client.post().uri("/api/recipes")
-                .header(HttpHeaders.AUTHORIZATION, bearer)
+                .header(HttpHeaders.COOKIE, cookieHeader)
                 .contentType(MediaType.MULTIPART_FORM_DATA)
                 .body(body(true).build())
                 .retrieve()
@@ -178,7 +179,7 @@ class RecipeApiServerTest {
 
         try {
             client.post().uri("/api/recipes")
-                    .header(HttpHeaders.AUTHORIZATION, bearer)
+                    .header(HttpHeaders.COOKIE, cookieHeader)
                     .contentType(MediaType.MULTIPART_FORM_DATA)
                     .body(body(false).build())
                     .retrieve().toBodilessEntity();

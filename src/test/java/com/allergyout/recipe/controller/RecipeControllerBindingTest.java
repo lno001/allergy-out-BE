@@ -60,21 +60,21 @@ class RecipeControllerBindingTest {
     }
 
     @Test
-    @DisplayName("multipart form-data → @ModelAttribute + @BindParam 중첩 리스트/파일 바인딩")
+    @DisplayName("multipart form-data → @ModelAttribute 중첩 리스트/파일 바인딩 (camelCase 폼 키)")
     void createRecipe_multipartBinding() throws Exception {
         mockMvc.perform(multipart("/api/recipes")
                         .file(file("RECIPE_MAIN_IMG"))
-                        .file(file("STEP_LIST[0].STEP_IMG"))
-                        .param("RECIPE_TITLE", "된장국")
-                        .param("RECIPE_INFO", "나트륨을 줄인 된장국")
-                        .param("MATERIAL_LIST[0].MATERIAL_NAME", "두부")
-                        .param("MATERIAL_LIST[0].AMOUNT", "20g")
-                        .param("MATERIAL_LIST[1].MATERIAL_NAME", "감자")
-                        .param("MATERIAL_LIST[1].AMOUNT", "10g")
-                        .param("STEP_LIST[0].STEP_ORDER", "1")
-                        .param("STEP_LIST[0].STEP_INFO", "감자, 양파는 얇게 썬다")
-                        .param("STEP_LIST[1].STEP_ORDER", "2")
-                        .param("STEP_LIST[1].STEP_INFO", "냄비에 넣고 끓인다"))
+                        .file(file("stepList[0].stepImg"))
+                        .param("recipeTitle", "된장국")
+                        .param("recipeInfo", "나트륨을 줄인 된장국")
+                        .param("materialList[0].materialName", "두부")
+                        .param("materialList[0].amount", "20g")
+                        .param("materialList[1].materialName", "감자")
+                        .param("materialList[1].amount", "10g")
+                        .param("stepList[0].stepOrder", "1")
+                        .param("stepList[0].stepInfo", "감자, 양파는 얇게 썬다")
+                        .param("stepList[1].stepOrder", "2")
+                        .param("stepList[1].stepInfo", "냄비에 넣고 끓인다"))
                 .andDo(print())
                 .andExpect(status().isCreated());
 

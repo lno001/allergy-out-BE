@@ -1,7 +1,6 @@
 package com.allergyout.recipe.controller;
 
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.ModelAttribute;
@@ -29,11 +28,11 @@ public class RecipeController {
     // POST /api/recipes  (multipart/form-data) — 인증 필요, 작성자 = 로그인한 memberNo
     // 텍스트/리스트 필드와 스텝 이미지(STEP_LIST[i].STEP_IMG)는 @ModelAttribute DTO로,
     // 대표 이미지(RECIPE_MAIN_IMG)만 @RequestParam으로 분리해서 받는다.
-    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping
     public ResponseEntity<ApiResponse<Void>> createRecipe(
-            @Valid @ModelAttribute RecipeCreateRequest request,
-            @RequestParam("RECIPE_MAIN_IMG") MultipartFile mainImg,
-            @AuthenticationPrincipal CustomUserDetails userDetails) {
+            												@Valid @ModelAttribute RecipeCreateRequest request,
+            												@RequestParam("RECIPE_MAIN_IMG") MultipartFile mainImg,
+            												@AuthenticationPrincipal CustomUserDetails userDetails) {
 
         recipeService.createRecipe(request, mainImg, userDetails.getMemberNo());
 
