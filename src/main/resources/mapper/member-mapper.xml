@@ -90,17 +90,23 @@
         SELECT MATERIAL_NAME
           FROM MEMBER_ALLERGY
          WHERE MEMBER_NO = #{memberNo}
-         ORDER BY MEMBER_ALLERGY_NO
+      ORDER BY MEMBER_ALLERGY_NO
     </select>
 
     <delete id="deleteAllergyList">
-        DELETE FROM MEMBER_ALLERGY
+        DELETE
+          FROM MEMBER_ALLERGY
          WHERE MEMBER_NO = #{memberNo}
     </delete>
 
     <insert id="insertAllergy">
-        INSERT INTO MEMBER_ALLERGY (MEMBER_NO, MATERIAL_NAME)
-        VALUES (#{memberNo}, #{materialName})
+        INSERT INTO MEMBER_ALLERGY (
+            MEMBER_NO,
+            MATERIAL_NAME
+        ) VALUES (
+            #{memberNo},
+            #{materialName}
+        )
     </insert>
 
     <!-- ============================================================
