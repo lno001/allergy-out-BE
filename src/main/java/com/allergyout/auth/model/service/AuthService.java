@@ -1,5 +1,8 @@
 package com.allergyout.auth.model.service;
 
+import java.util.Locale;
+import java.util.Map;
+
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,14 +30,16 @@ public class AuthService {
 
     @Transactional
     public void signup(SignupRequest request) {
+        String email = request.email().toLowerCase(Locale.ROOT); // 이메일은 소문자로 정규화해 저장·비교
+
         if (memberMapper.existsByMemberId(request.memberId())) {
-            throw new CustomException(ErrorCode.INVALID_INPUT_VALUE);
+            throw new CustomException(ErrorCode.DUPLICATE_VALUE, Map.of("memberId", "이미 사용 중인 아이디입니다."));
         }
-        if (memberMapper.existsByEmail(request.email())) {
-            throw new CustomException(ErrorCode.INVALID_INPUT_VALUE);
+        if (memberMapper.existsByEmail(email)) {
+            throw new CustomException(ErrorCode.DUPLICATE_VALUE, Map.of("email", "이미 사용 중인 이메일입니다."));
         }
         if (memberMapper.existsByPhone(request.phone())) {
-            throw new CustomException(ErrorCode.INVALID_INPUT_VALUE);
+            throw new CustomException(ErrorCode.DUPLICATE_VALUE, Map.of("phone", "이미 사용 중인 연락처입니다."));
         }
 
         Member member = Member.builder()
@@ -42,7 +47,7 @@ public class AuthService {
                 .memberPwd(passwordEncoder.encode(request.memberPwd()))
                 .memberName(request.memberName())
                 .phone(request.phone())
-                .email(request.email())
+                .email(email)
                 .build();
 
         memberMapper.insertMember(member);

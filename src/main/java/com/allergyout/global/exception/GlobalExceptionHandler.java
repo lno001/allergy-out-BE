@@ -1,6 +1,10 @@
 package com.allergyout.global.exception;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -12,31 +16,32 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
-	
-	
 
     // 서비스 코드에서 직접 던지는 예외 (CustomException(ErrorCode.XXX))
+    // details가 있으면 data에 {필드: 구체 메시지}로 실어 보냄, 없으면 data=null
     @ExceptionHandler(CustomException.class)
-    public ResponseEntity<ApiResponse<Void>> handleCustomException(CustomException e) {
+    public ResponseEntity<ApiResponse<Map<String, String>>> handleCustomException(CustomException e) {
         ErrorCode errorCode = e.getErrorCode();
-        log.warn("CustomException: {}", e.getMessage());
+        log.warn("CustomException: {} {}", errorCode.name(), e.getDetails());
         return ResponseEntity.status(errorCode.getStatus())
-                .body(ApiResponse.fail(errorCode.getStatus().value(), e.getMessage()));
+                .body(ApiResponse.fail(errorCode.getStatus().value(), errorCode.getMessage(), e.getDetails()));
     }
 
     // @Valid 검증 실패 (요청 DTO의 @NotBlank 등)
+    // status/msg = ErrorCode(INVALID_INPUT_VALUE), data = {필드명: DTO message}
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ApiResponse<Void>> handleValidationException(MethodArgumentNotValidException e) {
-        String message = e.getBindingResult().getFieldErrors().stream()
-                .findFirst()
-                .map(fieldError -> fieldError.getField() + ": " + fieldError.getDefaultMessage())
-                .orElse(ErrorCode.INVALID_INPUT_VALUE.getMessage());
-        log.warn("Validation failed: {}", message);
+    public ResponseEntity<ApiResponse<Map<String, String>>> handleValidationException(MethodArgumentNotValidException e) {
+        Map<String, String> details = new LinkedHashMap<>();
+        for (FieldError fieldError : e.getBindingResult().getFieldErrors()) {
+            details.putIfAbsent(fieldError.getField(), fieldError.getDefaultMessage());
+        }
+        log.warn("Validation failed: {}", details);
         return ResponseEntity.status(ErrorCode.INVALID_INPUT_VALUE.getStatus())
-                .body(ApiResponse.fail(ErrorCode.INVALID_INPUT_VALUE.getStatus().value(), message));
+                .body(ApiResponse.fail(
+                        ErrorCode.INVALID_INPUT_VALUE.getStatus().value(),
+                        ErrorCode.INVALID_INPUT_VALUE.getMessage(),
+                        details));
     }
-
-
 
     // 예상 못한 나머지 전부
     @ExceptionHandler(Exception.class)
