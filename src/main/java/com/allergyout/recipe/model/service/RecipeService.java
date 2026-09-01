@@ -37,9 +37,9 @@ public class RecipeService {
 
     @Transactional
     public void createRecipe(RecipeCreateRequest request, MultipartFile mainImg, Long memberNo) {
-        validateRecipeCreateRequest(request, mainImg);
+    	validateRecipeCreateRequest(request, mainImg);
 
-        // S3는 DB 트랜잭션 밖이라, 흐름 중 예외가 나면 catch에서 올린 파일을 수동으로 지운다.
+        // S3는 DB 트랜잭션 밖이라, 흐름 중 예외가 나면 catch에서 올린 파일을 수동으로 지운다.git
         List<String> uploadedKeys = new ArrayList<>();
         try {
             // 1. 대표 이미지 업로드 (recipeNo가 아직 없어 memberNo로 키 구성)
@@ -52,8 +52,8 @@ public class RecipeService {
             recipeParam.put("memberNo", memberNo);
             recipeParam.put("recipeTitle", request.recipeTitle());
             recipeParam.put("recipeInfo", request.recipeInfo());
-            recipeParam.put("recipeMainImg", mainImgUrl);
-            recipeParam.put("recipesImgPath", mainImg.getOriginalFilename());
+            recipeParam.put("recipeMainImg", mainImg.getOriginalFilename());
+            recipeParam.put("recipesImgPath",mainImgUrl);
             recipeMapper.insertRecipe(recipeParam);
             Long recipeNo = ((Number) recipeParam.get("recipeNo")).longValue();
 
