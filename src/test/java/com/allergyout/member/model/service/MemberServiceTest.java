@@ -496,4 +496,112 @@ class MemberServiceTest {
                     .isEqualTo(ErrorCode.MEMBER_NOT_FOUND);
         }
     }
+
+    @Nested
+    @DisplayName("updateAllergyList")
+    class UpdateAllergyList {
+
+        @Test
+        @DisplayName("정상 요청이면 전체 삭제 후 재삽입하고 그대로 반환한다")
+        void success() {
+            when(memberMapper.getMember(MEMBER_NO)).thenReturn(memberWithoutImg());
+
+            MemberAllergyResponse result =
+                    memberService.updateAllergyList(MEMBER_NO, List.of("땅콩", "우유", "갑각류"));
+
+            assertThat(result.allergyList()).containsExactly("땅콩", "우유", "갑각류");
+            verify(memberMapper).deleteAllergyList(MEMBER_NO);
+            verify(memberMapper).insertAllergy(MEMBER_NO, "땅콩");
+            verify(memberMapper).insertAllergy(MEMBER_NO, "우유");
+            verify(memberMapper).insertAllergy(MEMBER_NO, "갑각류");
+        }
+
+        @Test
+        @DisplayName("빈 리스트를 보내면 삭제만 하고 재삽입은 하지 않는다")
+        void emptyList_deletesOnly() {
+            when(memberMapper.getMember(MEMBER_NO)).thenReturn(memberWithoutImg());
+
+            MemberAllergyResponse result = memberService.updateAllergyList(MEMBER_NO, List.of());
+
+            assertThat(result.allergyList()).isEmpty();
+            verify(memberMapper).deleteAllergyList(MEMBER_NO);
+            verify(memberMapper, never()).insertAllergy(any(), any());
+        }
+
+        @Test
+        @DisplayName("항목이 30자를 초과하면 INVALID_INPUT_VALUE + 인덱스 필드 메시지, 삭제/삽입 미호출")
+        void tooLong() {
+            when(memberMapper.getMember(MEMBER_NO)).thenReturn(memberWithoutImg());
+            String tooLong = "a".repeat(31);
+
+            assertThatThrownBy(() -> memberService.updateAllergyList(MEMBER_NO, List.of("땅콩", tooLong)))
+                    .isInstanceOf(CustomException.class)
+                    .satisfies(ex -> {
+                        CustomException ce = (CustomException) ex;
+                        assertThat(ce.getErrorCode()).isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+                        assertThat(ce.getDetails())
+                                .containsExactly(entry("allergyList[1]", "알러지 항목은 각각 30자 이내로 입력해주세요."));
+                    });
+            verify(memberMapper, never()).deleteAllergyList(any());
+            verify(memberMapper, never()).insertAllergy(any(), any());
+        }
+
+        @Test
+        @DisplayName("빈 문자열 항목이 있으면 INVALID_INPUT_VALUE + 인덱스 필드 메시지")
+        void blankItem() {
+            when(memberMapper.getMember(MEMBER_NO)).thenReturn(memberWithoutImg());
+
+            assertThatThrownBy(() -> memberService.updateAllergyList(MEMBER_NO, List.of("땅콩", " ")))
+                    .isInstanceOf(CustomException.class)
+                    .satisfies(ex -> {
+                        CustomException ce = (CustomException) ex;
+                        assertThat(ce.getErrorCode()).isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+                        assertThat(ce.getDetails())
+                                .containsExactly(entry("allergyList[1]", "알러지 항목은 비어있을 수 없습니다."));
+                    });
+        }
+
+        @Test
+        @DisplayName("같은 항목이 중복되면 INVALID_INPUT_VALUE + 인덱스 필드 메시지")
+        void duplicated() {
+            when(memberMapper.getMember(MEMBER_NO)).thenReturn(memberWithoutImg());
+
+            assertThatThrownBy(() -> memberService.updateAllergyList(MEMBER_NO, List.of("땅콩", "우유", "땅콩")))
+                    .isInstanceOf(CustomException.class)
+                    .satisfies(ex -> {
+                        CustomException ce = (CustomException) ex;
+                        assertThat(ce.getErrorCode()).isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+                        assertThat(ce.getDetails())
+                                .containsExactly(entry("allergyList[2]", "중복된 알러지 항목입니다."));
+                    });
+        }
+
+        @Test
+        @DisplayName("여러 항목이 동시에 잘못되면 전부 data에 담긴다")
+        void multipleErrors() {
+            when(memberMapper.getMember(MEMBER_NO)).thenReturn(memberWithoutImg());
+
+            assertThatThrownBy(() -> memberService.updateAllergyList(MEMBER_NO, List.of("a".repeat(31), "우유", " ")))
+                    .isInstanceOf(CustomException.class)
+                    .satisfies(ex -> {
+                        CustomException ce = (CustomException) ex;
+                        assertThat(ce.getDetails()).containsExactly(
+                                entry("allergyList[0]", "알러지 항목은 각각 30자 이내로 입력해주세요."),
+                                entry("allergyList[2]", "알러지 항목은 비어있을 수 없습니다."));
+                    });
+        }
+
+        @Test
+        @DisplayName("회원이 없으면 MEMBER_NOT_FOUND, 삭제/삽입 미호출")
+        void notFound() {
+            when(memberMapper.getMember(MEMBER_NO)).thenReturn(null);
+
+            assertThatThrownBy(() -> memberService.updateAllergyList(MEMBER_NO, List.of("땅콩")))
+                    .isInstanceOf(CustomException.class)
+                    .extracting(e -> ((CustomException) e).getErrorCode())
+                    .isEqualTo(ErrorCode.MEMBER_NOT_FOUND);
+            verify(memberMapper, never()).deleteAllergyList(any());
+            verify(memberMapper, never()).insertAllergy(any(), any());
+        }
+    }
 }

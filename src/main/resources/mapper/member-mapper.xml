@@ -93,6 +93,16 @@
          ORDER BY MEMBER_ALLERGY_NO
     </select>
 
+    <delete id="deleteAllergyList">
+        DELETE FROM MEMBER_ALLERGY
+         WHERE MEMBER_NO = #{memberNo}
+    </delete>
+
+    <insert id="insertAllergy">
+        INSERT INTO MEMBER_ALLERGY (MEMBER_NO, MATERIAL_NAME)
+        VALUES (#{memberNo}, #{materialName})
+    </insert>
+
     <!-- ============================================================
          auth (로그인/회원가입) - auth 브랜치 병합분
          ============================================================ -->

@@ -1,8 +1,11 @@
 package com.allergyout.member.controller;
 
 import static org.hamcrest.Matchers.contains;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -13,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -94,5 +98,32 @@ class MemberControllerTest {
         mockMvc.perform(get("/api/members/allergy"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.allergyList").isEmpty());
+    }
+
+    @Test
+    void updateAllergyList_인증된사용자_200과저장된목록반환() throws Exception {
+        authenticateAsMockUser();
+        when(memberService.updateAllergyList(anyLong(), any()))
+                .thenReturn(MemberAllergyResponse.from(List.of("땅콩", "우유")));
+
+        mockMvc.perform(patch("/api/members/allergy")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"allergyList\":[\"땅콩\",\"우유\"]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.msg").value("알러지 필터 저장 성공"))
+                .andExpect(jsonPath("$.data.allergyList", contains("땅콩", "우유")));
+    }
+
+    @Test
+    void updateAllergyList_allergyList누락_400() throws Exception {
+        authenticateAsMockUser();
+
+        mockMvc.perform(patch("/api/members/allergy")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.data.allergyList").value("알러지 목록을 입력해주세요."));
     }
 }

@@ -35,6 +35,10 @@ public interface MemberMapper {
 
     List<String> getAllergyList(Long memberNo); // MEMBER_ALLERGY.MATERIAL_NAME 목록
 
+    void deleteAllergyList(Long memberNo); // 전체 교체 전 기존 행 삭제
+
+    void insertAllergy(@Param("memberNo") Long memberNo, @Param("materialName") String materialName);
+
     // --- auth (로그인/회원가입) ---
     void insertMember(Member member);
 
