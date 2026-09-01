@@ -91,7 +91,7 @@ public class RecipeService {
     }
 
     // 형식 검증은 DTO @Valid, 여기선 교차 필드·업로드 정합성만
-    private void validateCreateRequest(RecipeCreateRequest request, MultipartFile mainImg) {
+    private void validateRecipeCreateRequest (RecipeCreateRequest request, MultipartFile mainImg) {
         if (mainImg == null || mainImg.isEmpty()) {
             throw new CustomException(ErrorCode.INVALID_INPUT_VALUE);
         }
