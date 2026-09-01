@@ -1,0 +1,31 @@
+# 테스트 전용 설정 - 실제 시크릿/DB 없이 컨텍스트가 뜨도록 더미값.
+# 운영 설정은 src/main/resources/application.yml (환경변수 주입). 이 파일은 테스트 클래스패스에서만 우선함.
+spring:
+  application:
+    name: AllergyOut
+  datasource:
+    url: jdbc:oracle:thin:@localhost:1521:xe
+    username: test
+    password: test
+    driver-class-name: oracle.jdbc.OracleDriver
+
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  type-aliases-package: com.allergyout
+  configuration:
+    map-underscore-to-camel-case: true
+
+jwt:
+  secret: test-only-dummy-secret-do-not-use-in-prod-0123456789abcdef
+  expiration: 3600000
+  refresh-expiration: 1209600000
+
+cloud:
+  aws:
+    credentials:
+      access-key: test
+      secret-key: test
+    region:
+      static: ap-northeast-2
+    s3:
+      bucket: test-bucket

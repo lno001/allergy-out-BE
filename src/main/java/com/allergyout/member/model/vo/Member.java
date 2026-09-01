@@ -13,14 +13,15 @@ import lombok.Getter;
 @AllArgsConstructor
 public class Member {
 
-    private final Long memberNo;      // MEMBER_NO (PK)
-    private final String memberId;    // MEMBER_ID (로그인 아이디)
-    private final String memberPwd;   // MEMBER_PWD (암호화된 비밀번호)
-    private final String memberName;  // MEMBER_NAME
-    private final String phone;       // PHONE
-    private final String email;       // EMAIL
-    private final String memberImg;   // MEMBER_IMG (프로필 사진 경로)
-    private final String role;        // ROLE (기본값 ROLE_USER, DB default)
-    private final LocalDateTime createDate; // CREATE_DATE (DB default SYSDATE)
-    private final String delYn;       // DEL_YN (Y: 탈퇴, N: 정상, DB default 'N')
+    private final Long memberNo;      // MEMBER_NO (PK, IDENTITY)
+    private final String memberId;    // MEMBER_ID NVARCHAR2(20) (로그인 아이디)
+    private final String memberPwd;   // MEMBER_PWD VARCHAR2(200) (암호화된 비밀번호)
+    private final String memberName;  // MEMBER_NAME NVARCHAR2(30)
+    private final String phone;       // PHONE VARCHAR2(20)
+    private final String email;       // EMAIL VARCHAR2(50)
+    private final String memberImg;   // MEMBER_IMG VARCHAR2(300) NULL (업로드 원본 파일명)
+    private final String role;        // ROLE VARCHAR2(10) DEFAULT 'ROLE_USER'
+    private final LocalDateTime createDate; // CREATE_DATE DATE DEFAULT SYSDATE
+    private final String delYn;       // DEL_YN CHAR(1) DEFAULT 'N' (Y: 탈퇴, N: 정상)
+    private final String memberImgPath;    // MEMBER_IMG_PATH VARCHAR2(300) NULL (S3 버킷 링크)
 }
