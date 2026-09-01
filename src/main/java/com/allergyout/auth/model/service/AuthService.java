@@ -62,13 +62,13 @@ public class AuthService {
             throw new CustomException(ErrorCode.UNAUTHORIZED);
         }
 
-        tokenService.createAuthTokens(member, response);
-        return toMemberLoginResponse(member);
+        String accessToken = tokenService.createAuthTokens(member, response);
+        return toMemberLoginResponse(accessToken, member);
     }
 
     @Transactional
-    public void refreshToken(HttpServletRequest request, HttpServletResponse response) {
-        tokenService.refreshToken(request, response);
+    public String refreshToken(HttpServletRequest request, HttpServletResponse response) {
+        return tokenService.refreshToken(request, response);
     }
 
     @Transactional
@@ -86,12 +86,17 @@ public class AuthService {
         return toMemberLoginResponse(member);
     }
 
-    private MemberLoginResponse toMemberLoginResponse(Member member) {
+    private MemberLoginResponse toMemberLoginResponse(String accessToken, Member member) {
         return new MemberLoginResponse(
+                accessToken,
                 member.getMemberNo(),
                 member.getMemberId(),
                 member.getMemberName(),
                 member.getRole(),
                 member.getMemberImg());
+    }
+    
+    private MemberLoginResponse toMemberLoginResponse(Member member) {
+        return toMemberLoginResponse(null, member);
     }
 }
