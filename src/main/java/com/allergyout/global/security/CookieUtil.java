@@ -14,18 +14,14 @@ import jakarta.servlet.http.HttpServletResponse;
 @Component
 public class CookieUtil {
 
-    public static final String ACCESS_COOKIE = "accessToken";
     public static final String REFRESH_COOKIE = "refreshToken";
 
-    private final long accessMaxAgeSeconds;
     private final long refreshMaxAgeSeconds;
     private final boolean secure;
 
     public CookieUtil(
-            @Value("${jwt.expiration}") long accessExpirationMs,
             @Value("${jwt.refresh-expiration}") long refreshExpirationMs,
             @Value("${jwt.cookie.secure:false}") boolean secure) {
-        this.accessMaxAgeSeconds = accessExpirationMs / 1000;
         this.refreshMaxAgeSeconds = refreshExpirationMs / 1000;
         this.secure = secure;
     }
@@ -43,17 +39,12 @@ public class CookieUtil {
         return null;
     }
 
-    public void addAccessToken(HttpServletResponse response, String token) {
-        addCookie(response, ACCESS_COOKIE, token, "/", "Lax", accessMaxAgeSeconds);
-    }
-
     public void addRefreshToken(HttpServletResponse response, String token) {
-        addCookie(response, REFRESH_COOKIE, token, "/api/auth", "Strict", refreshMaxAgeSeconds);
+        addCookie(response, REFRESH_COOKIE, token, "/api/auth", "Lax", refreshMaxAgeSeconds);
     }
 
     public void deleteAuthCookies(HttpServletResponse response) {
-        addCookie(response, ACCESS_COOKIE, "", "/", "Lax", 0);
-        addCookie(response, REFRESH_COOKIE, "", "/api/auth", "Strict", 0);
+        addCookie(response, REFRESH_COOKIE, "", "/api/auth", "Lax", 0);
     }
 
     private void addCookie(HttpServletResponse response, String name, String value,
