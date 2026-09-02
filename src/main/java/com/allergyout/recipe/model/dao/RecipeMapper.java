@@ -63,4 +63,8 @@ public interface RecipeMapper {
 
     // UNIQUE(RECIPE_NO, STEP_ORDER) 충돌 회피 : 남은 기존 단계들의 STEP_ORDER 를 잠깐 +1000 밀어둔다.
     void bumpStepOrders(long recipeNo);
+
+    // ---- 레시피 삭제 : 소프트 삭제 (RECIPES.DEL_YN='Y'). MATERIAL·RECIPE_STEPS·S3 는 그대로 둔다 ----
+    // WHERE 에 memberNo 도 걸어 소유자 이중 확인 (Service 에서 이미 검사하지만 백스톱)
+    void updateRecipeDelYn(@Param("recipeNo") long recipeNo, @Param("memberNo") long memberNo);
 }

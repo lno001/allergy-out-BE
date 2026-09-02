@@ -338,4 +338,40 @@ class RecipeApiServerTest {
 
         Mockito.verify(recipeMapper, Mockito.never()).updateRecipe(any());
     }
+
+    // 삭제 end-to-end: 작성자 본인(memberNo=42) → 200, DEL_YN='Y' UPDATE 호출 (소프트 삭제)
+    @Test
+    @DisplayName("실서버 DELETE /api/recipes/{id} → 작성자 본인이면 200, updateRecipeDelYn 호출")
+    void deleteRecipe_realServer() {
+        when(recipeMapper.getRecipeByNo(5L)).thenReturn(Recipe.builder()
+                .recipeNo(5L).memberNo(42L).delYn("N").build());
+
+        var res = client.method(org.springframework.http.HttpMethod.DELETE).uri("/api/recipes/5")
+                .header(HttpHeaders.AUTHORIZATION, bearer)
+                .retrieve()
+                .toEntity(String.class);
+
+        assertThat(res.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(res.getBody()).contains("\"code\":200").contains("레시피 삭제 성공했습니다.");
+        Mockito.verify(recipeMapper).updateRecipeDelYn(5L, 42L);
+    }
+
+    // 인가: 남의 레시피(memberNo=999) 삭제 시 403, UPDATE 미도달
+    @Test
+    @DisplayName("실서버 DELETE: 작성자 본인이 아니면 403, updateRecipeDelYn 미호출")
+    void deleteRecipe_notOwner_forbidden() {
+        when(recipeMapper.getRecipeByNo(5L)).thenReturn(Recipe.builder()
+                .recipeNo(5L).memberNo(999L).delYn("N").build());
+
+        try {
+            client.delete().uri("/api/recipes/5")
+                    .header(HttpHeaders.AUTHORIZATION, bearer)
+                    .retrieve().toBodilessEntity();
+        } catch (RestClientResponseException e) {
+            assertThat(e.getStatusCode().value()).isEqualTo(403);
+            assertThat(e.getResponseBodyAsString()).contains("권한이 없습니다.");
+        }
+
+        Mockito.verify(recipeMapper, Mockito.never()).updateRecipeDelYn(anyLong(), anyLong());
+    }
 }

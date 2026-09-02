@@ -153,6 +153,20 @@ public class RecipeService {
                 recipeMapper.getStepsByRecipeNo(recipeNo));
     }
 
+    // 레시피 삭제 — 소프트 삭제 (RECIPES.DEL_YN='Y')만. 작성자 본인만.
+    // MATERIAL·RECIPE_STEPS 행과 S3 객체는 그대로 둔다 (살아있는 레시피로만 접근되므로 캐스케이드 불필요).
+    @Transactional
+    public void deleteRecipe(Long recipeNo, Long memberNo) {
+        Recipe existing = recipeMapper.getRecipeByNo(recipeNo);
+        if (existing == null) {
+            throw new CustomException(ErrorCode.RECIPE_NOT_FOUND);
+        }
+        if (!existing.getMemberNo().equals(memberNo)) {
+            throw new CustomException(ErrorCode.FORBIDDEN);
+        }
+        recipeMapper.updateRecipeDelYn(recipeNo, memberNo);
+    }
+
     // ============================================================
     //  레시피 수정 — "최종 상태 기반" 갱신 (전부 삭제 후 재삽입 금지)
     //  요청의 materialList / stepList 가 그 레시피의 최종 상태다. 기존 DB 행과 대조해
@@ -191,6 +205,7 @@ public class RecipeService {
             }
             recipeMapper.updateRecipe(Recipe.builder()
                     .recipeNo(recipeNo)
+                    .memberNo(memberNo)             // WHERE 소유자 이중 확인용
                     .recipeTitle(request.recipeTitle())
                     .recipeInfo(request.recipeInfo())
                     .recipeMainImg(mainImgName)      // RECIPE_MAIN_IMG  = 원본 파일명

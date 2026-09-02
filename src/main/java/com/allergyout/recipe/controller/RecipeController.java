@@ -3,6 +3,7 @@ package com.allergyout.recipe.controller;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -82,5 +83,16 @@ public class RecipeController {
         recipeService.updateRecipe(recipeNo, request, mainImg, userDetails.getMemberNo());
 
         return ResponseEntity.ok(ApiResponse.success("레시피 수정 성공했습니다.", null));
+    }
+
+    // DELETE /api/recipes/{recipeNo} — 인증 필요, 작성자 본인만. 소프트 삭제 (RECIPES.DEL_YN='Y').
+    @DeleteMapping("/{recipeNo}")
+    public ResponseEntity<ApiResponse<Void>> deleteRecipe(
+            @PathVariable("recipeNo") Long recipeNo,   // 이름 명시 — Eclipse는 -parameters 없이 컴파일
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+
+        recipeService.deleteRecipe(recipeNo, userDetails.getMemberNo());
+
+        return ResponseEntity.ok(ApiResponse.success("레시피 삭제 성공했습니다.", null));
     }
 }

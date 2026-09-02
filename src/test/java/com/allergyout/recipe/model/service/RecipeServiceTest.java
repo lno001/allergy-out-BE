@@ -490,4 +490,44 @@ class RecipeServiceTest {
 
         verify(recipeMapper, never()).getRecipeByNo(anyLong());
     }
+
+    // ---- 레시피 삭제 (deleteRecipe) — 소프트 삭제 ----
+
+    @Test
+    @DisplayName("삭제: 작성자 본인이면 DEL_YN='Y' UPDATE, 자식·S3 는 안 건드림")
+    void deleteRecipe_softDeletes() {
+        when(recipeMapper.getRecipeByNo(RID)).thenReturn(ownedRecipe());
+
+        recipeService.deleteRecipe(RID, MEMBER_NO);
+
+        verify(recipeMapper).updateRecipeDelYn(RID, MEMBER_NO);
+        verify(recipeMapper, never()).deleteMaterial(anyLong());
+        verify(recipeMapper, never()).deleteRecipeStep(anyLong());
+        verify(s3Service, never()).delete(anyString());
+    }
+
+    @Test
+    @DisplayName("삭제: 없는 레시피면 RECIPE_NOT_FOUND, UPDATE 미실행")
+    void deleteRecipe_notFound() {
+        when(recipeMapper.getRecipeByNo(RID)).thenReturn(null);
+
+        assertThatThrownBy(() -> recipeService.deleteRecipe(RID, MEMBER_NO))
+                .isInstanceOfSatisfying(CustomException.class,
+                        ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.RECIPE_NOT_FOUND));
+
+        verify(recipeMapper, never()).updateRecipeDelYn(anyLong(), anyLong());
+    }
+
+    @Test
+    @DisplayName("삭제: 작성자 본인이 아니면 FORBIDDEN, UPDATE 미실행")
+    void deleteRecipe_notOwner() {
+        when(recipeMapper.getRecipeByNo(RID)).thenReturn(Recipe.builder()
+                .recipeNo(RID).memberNo(999L).delYn("N").build());
+
+        assertThatThrownBy(() -> recipeService.deleteRecipe(RID, MEMBER_NO))
+                .isInstanceOfSatisfying(CustomException.class,
+                        ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.FORBIDDEN));
+
+        verify(recipeMapper, never()).updateRecipeDelYn(anyLong(), anyLong());
+    }
 }
