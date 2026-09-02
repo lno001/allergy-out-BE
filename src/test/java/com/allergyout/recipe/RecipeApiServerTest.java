@@ -11,6 +11,7 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 import java.sql.Connection;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -39,6 +40,7 @@ import com.allergyout.global.security.JwtUtil;
 import com.allergyout.member.model.dao.MemberMapper;
 import com.allergyout.member.model.vo.Member;
 import com.allergyout.recipe.model.dao.RecipeMapper;
+import com.allergyout.recipe.model.dto.RecipeListItem;
 import com.allergyout.recipe.model.vo.Material;
 import com.allergyout.recipe.model.vo.RecipeStep;
 import com.allergyout.s3.S3Service;
@@ -93,7 +95,7 @@ class RecipeApiServerTest {
         MultipartBodyBuilder b = new MultipartBodyBuilder();
         b.part("recipeTitle", "된장국");
         b.part("recipeInfo", "나트륨을 줄인 된장국");
-        b.part("RECIPE_MAIN_IMG", file("main.jpg")).contentType(MediaType.IMAGE_JPEG);
+        b.part("recipeMainImg", file("main.jpg")).contentType(MediaType.IMAGE_JPEG);
         b.part("materialList[0].materialName", "두부");
         b.part("materialList[0].amount", "20g(2×2×2cm)");
         b.part("materialList[1].materialName", "감자");
@@ -194,5 +196,29 @@ class RecipeApiServerTest {
         }
 
         Mockito.verify(s3Service).delete("recipes/42/main.jpg");
+    }
+
+    // 목록 조회 end-to-end: GET /api/recipes → 200, data 에 recipes[] + pageInfo(offset·totalPages 포함),
+    // createDate 는 "yyyy-MM-dd" 로 직렬화. 인증 없이도 됨.
+    @Test
+    @DisplayName("실서버 GET /api/recipes → 200, recipes + pageInfo, createDate 포맷")
+    void getRecipeList_realServer() {
+        when(recipeMapper.getRecipeList(0, 20)).thenReturn(List.of(
+                new RecipeListItem(101L, "된장국", "https://img/101.jpg", "관리자", LocalDate.of(2026, 8, 21))));
+        when(recipeMapper.countRecipeList()).thenReturn(37);
+
+        String body = client.get().uri("/api/recipes")
+                .retrieve()
+                .body(String.class);
+
+        assertThat(body)
+                .contains("\"code\":200")
+                .contains("레시피 목록 조회 성공했습니다.")
+                .contains("\"recipeNo\":101")
+                .contains("\"memberName\":\"관리자\"")
+                .contains("\"createDate\":\"2026-08-21\"")
+                .contains("\"totalElements\":37")
+                .contains("\"totalPages\":2")
+                .contains("\"offset\":0");
     }
 }

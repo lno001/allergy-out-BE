@@ -71,7 +71,7 @@ class RecipeControllerBindingTest {
     @DisplayName("multipart form-data → @ModelAttribute 중첩 리스트/파일 바인딩 (camelCase 폼 키)")
     void createRecipe_multipartBinding() throws Exception {
         mockMvc.perform(multipart("/api/recipes")
-                        .file(file("RECIPE_MAIN_IMG"))
+                        .file(file("recipeMainImg"))
                         .file(file("stepList[0].stepImg"))
                         .param("recipeTitle", "된장국")
                         .param("recipeInfo", "나트륨을 줄인 된장국")

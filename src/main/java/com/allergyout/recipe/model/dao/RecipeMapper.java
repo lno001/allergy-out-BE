@@ -1,9 +1,12 @@
 package com.allergyout.recipe.model.dao;
 
+import java.util.List;
 import java.util.Map;
 
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
 
+import com.allergyout.recipe.model.dto.RecipeListItem;
 import com.allergyout.recipe.model.vo.Material;
 import com.allergyout.recipe.model.vo.RecipeStep;
 
@@ -18,4 +21,16 @@ public interface RecipeMapper {
     void insertMaterial(Material material);
 
     void insertRecipeStep(RecipeStep step);
+
+    // ---- 목록 조회 (비회원) : RECIPES ⨝ MEMBER, DEL_YN='N', 최신순, OFFSET 페이징 ----
+    List<RecipeListItem> getRecipeList(@Param("offset") int offset, @Param("size") int size);
+
+    int countRecipeList();
+
+    // ---- 목록 조회 (회원) : 위 + 회원 알러지 재료가 들어간 레시피는 제외 ----
+    List<RecipeListItem> getRecipeListForMember(@Param("offset") int offset,
+                                                @Param("size") int size,
+                                                @Param("memberNo") long memberNo);
+
+    int countRecipeListForMember(long memberNo);
 }

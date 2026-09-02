@@ -3,6 +3,7 @@ package com.allergyout.recipe.model.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -13,6 +14,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
@@ -30,6 +32,8 @@ import com.allergyout.global.exception.CustomException;
 import com.allergyout.recipe.model.dao.RecipeMapper;
 import com.allergyout.recipe.model.dto.MaterialCreateRequest;
 import com.allergyout.recipe.model.dto.RecipeCreateRequest;
+import com.allergyout.recipe.model.dto.RecipeListItem;
+import com.allergyout.recipe.model.dto.RecipeListResponse;
 import com.allergyout.recipe.model.dto.StepCreateRequest;
 import com.allergyout.recipe.model.vo.RecipeStep;
 import com.allergyout.s3.S3Service;
@@ -84,7 +88,7 @@ class RecipeServiceTest {
 
         recipeService.createRecipe(
                 request(List.of(step(1, "재료를 썬다", null), step(2, "끓인다", null))),
-                img("RECIPE_MAIN_IMG"), MEMBER_NO);
+                img("recipeMainImg"), MEMBER_NO);
 
         verify(recipeMapper).insertRecipe(any());
         verify(recipeMapper, times(1)).insertMaterial(any());
@@ -92,7 +96,7 @@ class RecipeServiceTest {
     }
 
     // 대표 이미지 필수 규칙: validateCreateRequest 가 S3 업로드·INSERT 전에 예외로 끊는지.
-    // (RECIPE_MAIN_IMG 는 NOT NULL 컬럼이라 누락 시 조기 차단해야 함)
+    // (recipeMainImg 는 NOT NULL 컬럼이라 누락 시 조기 차단해야 함)
     @Test
     @DisplayName("대표 이미지 없으면 CustomException, 매퍼 미호출")
     void createRecipe_noMainImg() {
@@ -110,7 +114,7 @@ class RecipeServiceTest {
     void createRecipe_duplicateStepOrder() {
         assertThatThrownBy(() -> recipeService.createRecipe(
                 request(List.of(step(1, "a", null), step(1, "b", null))),
-                img("RECIPE_MAIN_IMG"), MEMBER_NO))
+                img("recipeMainImg"), MEMBER_NO))
                 .isInstanceOf(CustomException.class);
 
         verify(recipeMapper, never()).insertRecipe(any());
@@ -126,7 +130,7 @@ class RecipeServiceTest {
 
         recipeService.createRecipe(
                 request(List.of(step(1, "재료를 썬다", null))),
-                img("RECIPE_MAIN_IMG"), MEMBER_NO);
+                img("recipeMainImg"), MEMBER_NO);
 
         ArgumentCaptor<RecipeStep> captor = ArgumentCaptor.forClass(RecipeStep.class);
         verify(recipeMapper).insertRecipeStep(captor.capture());
@@ -146,7 +150,7 @@ class RecipeServiceTest {
 
         recipeService.createRecipe(
                 request(List.of(step(1, "재료를 썬다", img("stepList[0].stepImg")))),
-                img("RECIPE_MAIN_IMG"), MEMBER_NO);
+                img("recipeMainImg"), MEMBER_NO);
 
         ArgumentCaptor<RecipeStep> captor = ArgumentCaptor.forClass(RecipeStep.class);
         verify(recipeMapper).insertRecipeStep(captor.capture());
@@ -166,9 +170,62 @@ class RecipeServiceTest {
 
         assertThatThrownBy(() -> recipeService.createRecipe(
                 request(List.of(step(1, "...", null))),
-                img("RECIPE_MAIN_IMG"), MEMBER_NO))
+                img("recipeMainImg"), MEMBER_NO))
                 .isInstanceOf(RuntimeException.class);
 
         verify(s3Service).delete("recipes/7/main.jpg");
+    }
+
+    // ---- 목록 조회 ----
+
+    // 비회원(memberNo == null): 알러지 없는 비회원용 매퍼(getRecipeList/countRecipeList) 호출,
+    // offset = page*size 계산, count 로 totalPages(올림) 세팅
+    @Test
+    @DisplayName("목록 조회(비회원): 비회원 매퍼 호출 + offset·pageInfo 계산")
+    void getRecipeList_guest() {
+        List<RecipeListItem> rows = List.of(
+                new RecipeListItem(2L, "김치찌개", "url2", "관리자", LocalDate.of(2026, 8, 21)),
+                new RecipeListItem(1L, "된장국", "url1", "관리자", LocalDate.of(2026, 8, 20)));
+        when(recipeMapper.getRecipeList(20, 10)).thenReturn(rows); // page 2 * size 10 = offset 20
+        when(recipeMapper.countRecipeList()).thenReturn(37);
+
+        RecipeListResponse res = recipeService.getRecipeList(2, 10, null);
+
+        assertThat(res.recipes()).hasSize(2);
+        assertThat(res.pageInfo().getOffset()).isEqualTo(20);
+        assertThat(res.pageInfo().getTotalElements()).isEqualTo(37);
+        assertThat(res.pageInfo().getTotalPages()).isEqualTo(4); // ceil(37/10)
+        verify(recipeMapper, never()).getRecipeListForMember(anyInt(), anyInt(), anyLong());
+    }
+
+    // 회원(memberNo != null): 회원용 매퍼(getRecipeListForMember/countRecipeListForMember)로 분기
+    @Test
+    @DisplayName("목록 조회(회원): 회원 매퍼로 분기 호출")
+    void getRecipeList_member() {
+        when(recipeMapper.getRecipeListForMember(0, 20, 7L)).thenReturn(List.of());
+        when(recipeMapper.countRecipeListForMember(7L)).thenReturn(0);
+
+        recipeService.getRecipeList(0, 20, 7L);
+
+        verify(recipeMapper).getRecipeListForMember(0, 20, 7L);
+        verify(recipeMapper).countRecipeListForMember(7L);
+        verify(recipeMapper, never()).getRecipeList(anyInt(), anyInt());
+    }
+
+    // page 음수는 Service 에서 차단 (매퍼 미호출)
+    @Test
+    @DisplayName("page 음수면 CustomException, 매퍼 미호출")
+    void getRecipeList_negativePage() {
+        assertThatThrownBy(() -> recipeService.getRecipeList(-1, 10, null))
+                .isInstanceOf(CustomException.class);
+        verify(recipeMapper, never()).getRecipeList(anyInt(), anyInt());
+    }
+
+    // size 상한(50) 초과도 차단
+    @Test
+    @DisplayName("size가 50 초과면 CustomException")
+    void getRecipeList_sizeTooLarge() {
+        assertThatThrownBy(() -> recipeService.getRecipeList(0, 51, null))
+                .isInstanceOf(CustomException.class);
     }
 }
