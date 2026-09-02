@@ -60,6 +60,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/members/**").authenticated()
                         .requestMatchers(HttpMethod.PATCH, "/api/members/**").authenticated()
                         .requestMatchers(HttpMethod.DELETE, "/api/members/**").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/bookmarks").authenticated()
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
                         .requestMatchers("/api/admin/**").hasAuthority("ROLE_ADMIN")
                         .anyRequest().authenticated()
