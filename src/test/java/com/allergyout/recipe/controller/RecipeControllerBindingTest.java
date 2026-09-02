@@ -10,6 +10,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.util.List;
 
+import org.springframework.http.HttpMethod;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -29,6 +31,7 @@ import com.allergyout.global.security.CustomUserDetails;
 import com.allergyout.global.security.JwtFilter;
 import com.allergyout.member.model.vo.Member;
 import com.allergyout.recipe.model.dto.RecipeCreateRequest;
+import com.allergyout.recipe.model.dto.RecipeUpdateRequest;
 import com.allergyout.recipe.model.service.RecipeService;
 
 /**
@@ -97,6 +100,44 @@ class RecipeControllerBindingTest {
         assertThat(r.stepList()).hasSize(2);
         assertThat(r.stepList().get(0).stepInfo()).isEqualTo("감자, 양파는 얇게 썬다");
         assertThat(r.stepList().get(0).stepImg()).isNotNull();
+        assertThat(r.stepList().get(1).stepImg()).isNull();
+    }
+
+    // 수정: PATCH multipart 폼 키가 RecipeUpdateRequest 로 바인딩되는지.
+    // 등록과 다른 점 — materialList[i].materialNo / stepList[i].stepNo (기존 행 PK, 미지정 시 null),
+    // 대표 이미지 미전송(required = false), PathVariable recipeNo.
+    @Test
+    @DisplayName("PATCH multipart form-data → @ModelAttribute 바인딩 (materialNo/stepNo 포함, 대표 이미지 없이)")
+    void updateRecipe_multipartBinding() throws Exception {
+        mockMvc.perform(multipart(HttpMethod.PATCH, "/api/recipes/5")
+                        .file(file("stepList[0].stepImg"))
+                        .param("recipeTitle", "김치찌개")
+                        .param("recipeInfo", "묵은지로 끓인 김치찌개")
+                        .param("materialList[0].materialNo", "100")
+                        .param("materialList[0].materialName", "묵은지")
+                        .param("materialList[0].amount", "250g")
+                        .param("materialList[1].materialName", "돼지고기") // materialNo 없음 → 신규
+                        .param("materialList[1].amount", "100g")
+                        .param("stepList[0].stepNo", "200")
+                        .param("stepList[0].stepOrder", "1")
+                        .param("stepList[0].stepInfo", "재료를 볶는다")
+                        .param("stepList[1].stepOrder", "2")            // stepNo 없음 → 신규
+                        .param("stepList[1].stepInfo", "물을 붓고 끓인다"))
+                .andDo(print())
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<RecipeUpdateRequest> req = ArgumentCaptor.forClass(RecipeUpdateRequest.class);
+        verify(recipeService).updateRecipe(eq(5L), req.capture(), any(), eq(1L));
+
+        RecipeUpdateRequest r = req.getValue();
+        assertThat(r.recipeTitle()).isEqualTo("김치찌개");
+        assertThat(r.materialList()).hasSize(2);
+        assertThat(r.materialList().get(0).materialNo()).isEqualTo(100L);
+        assertThat(r.materialList().get(1).materialNo()).isNull();
+        assertThat(r.stepList()).hasSize(2);
+        assertThat(r.stepList().get(0).stepNo()).isEqualTo(200L);
+        assertThat(r.stepList().get(0).stepImg()).isNotNull();
+        assertThat(r.stepList().get(1).stepNo()).isNull();
         assertThat(r.stepList().get(1).stepImg()).isNull();
     }
 }

@@ -9,6 +9,7 @@ import org.apache.ibatis.annotations.Param;
 import com.allergyout.recipe.model.dto.RecipeDetailItem;
 import com.allergyout.recipe.model.dto.RecipeListItem;
 import com.allergyout.recipe.model.vo.Material;
+import com.allergyout.recipe.model.vo.Recipe;
 import com.allergyout.recipe.model.vo.RecipeStep;
 
 @Mapper
@@ -43,4 +44,23 @@ public interface RecipeMapper {
     List<Material> getMaterialsByRecipeNo(long recipeNo);
 
     List<RecipeStep> getStepsByRecipeNo(long recipeNo);
+
+    // ---- 레시피 수정 : "최종 상태 기반" 갱신 (getMaterialsByRecipeNo / getStepsByRecipeNo 는 상세 조회와 공유) ----
+
+    // 수정 대상 조회 (소유자 확인 + 기존 대표 이미지 값 확보). 없으면 null.
+    Recipe getRecipeByNo(long recipeNo);
+
+    // RECIPES UPDATE — 이미지 컬럼도 항상 채운다 (대표 이미지 미변경이면 Service 가 기존 값을 그대로 다시 넣음).
+    void updateRecipe(Recipe recipe);
+
+    void updateMaterial(Material material);
+
+    void deleteMaterial(long materialNo);
+
+    void updateRecipeStep(RecipeStep step);
+
+    void deleteRecipeStep(long stepNo);
+
+    // UNIQUE(RECIPE_NO, STEP_ORDER) 충돌 회피 : 남은 기존 단계들의 STEP_ORDER 를 잠깐 +1000 밀어둔다.
+    void bumpStepOrders(long recipeNo);
 }

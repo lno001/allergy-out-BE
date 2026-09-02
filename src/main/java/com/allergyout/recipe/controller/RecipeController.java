@@ -5,6 +5,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -17,6 +18,7 @@ import com.allergyout.global.security.CustomUserDetails;
 import com.allergyout.recipe.model.dto.RecipeCreateRequest;
 import com.allergyout.recipe.model.dto.RecipeDetailResponse;
 import com.allergyout.recipe.model.dto.RecipeListResponse;
+import com.allergyout.recipe.model.dto.RecipeUpdateRequest;
 import com.allergyout.recipe.model.service.RecipeService;
 
 import jakarta.validation.Valid;
@@ -65,5 +67,20 @@ public class RecipeController {
 
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.created("레시피 등록 성공했습니다.", null));
+    }
+
+    // PATCH /api/recipes/{recipeNo}  (multipart/form-data) — 인증 필요, 작성자 본인만 수정 가능.
+    // 재료·단계 리스트와 단계 이미지(stepList[i].stepImg)는 @ModelAttribute DTO로,
+    // 대표 이미지(recipeMainImg)만 @RequestParam으로 분리. 변경 안 했으면 미전송 → required = false.
+    @PatchMapping("/{recipeNo}")
+    public ResponseEntity<ApiResponse<Void>> updateRecipe(
+            @PathVariable("recipeNo") Long recipeNo,   // 이름 명시 — Eclipse는 -parameters 없이 컴파일
+            @Valid @ModelAttribute RecipeUpdateRequest request,
+            @RequestParam(value = "recipeMainImg", required = false) MultipartFile mainImg,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+
+        recipeService.updateRecipe(recipeNo, request, mainImg, userDetails.getMemberNo());
+
+        return ResponseEntity.ok(ApiResponse.success("레시피 수정 성공했습니다.", null));
     }
 }

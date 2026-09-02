@@ -10,6 +10,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 // isBookmarked   = 현재 매퍼가 0(false) 고정. 즐겨찾기 기능 구현 시 Service 에서 실제 판정으로 교체.
 public record RecipeDetailItem(
         Long recipeNo,        // RECIPE_NO
+        Long memberNo,        // RECIPES.MEMBER_NO (작성자 PK — 프론트가 로그인 회원과 비교해 "내 글" 판정)
         String recipeTitle,   // RECIPE_TITLE
         String recipeInfo,    // RECIPE_INFO
         String recipeMainImg,  // RECIPE_MAIN_IMG  (원본 파일명)

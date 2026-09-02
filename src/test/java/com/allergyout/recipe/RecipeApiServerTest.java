@@ -43,6 +43,7 @@ import com.allergyout.recipe.model.dao.RecipeMapper;
 import com.allergyout.recipe.model.dto.RecipeDetailItem;
 import com.allergyout.recipe.model.dto.RecipeListItem;
 import com.allergyout.recipe.model.vo.Material;
+import com.allergyout.recipe.model.vo.Recipe;
 import com.allergyout.recipe.model.vo.RecipeStep;
 import com.allergyout.s3.S3Service;
 
@@ -233,7 +234,7 @@ class RecipeApiServerTest {
     @DisplayName("실서버 GET /api/recipes/{id} → 200, recipe+materials+steps, 이미지 원본명·URL 둘 다")
     void getRecipe_realServer() {
         when(recipeMapper.getRecipeDetail(5L)).thenReturn(new RecipeDetailItem(
-                5L, "된장국", "나트륨 줄인 된장국",
+                5L, 7L, "된장국", "나트륨 줄인 된장국",                                  // recipeNo, memberNo(작성자)
                 "main.jpg",                                                          // RECIPE_MAIN_IMG  (원본명)
                 "https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/7/main.jpg",  // RECIPES_IMG_PATH (URL)
                 "관리자", LocalDate.of(2026, 8, 21), false));
@@ -250,6 +251,7 @@ class RecipeApiServerTest {
                 .contains("\"code\":200")
                 .contains("레시피 상세 조회 성공했습니다.")
                 .contains("\"recipeNo\":5")
+                .contains("\"memberNo\":7")   // 작성자 PK
                 .contains("\"recipeMainImg\":\"main.jpg\"")
                 .contains("\"recipesImgPath\":\"https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/7/main.jpg\"")
                 .contains("\"isBookmarked\":false")
@@ -281,5 +283,59 @@ class RecipeApiServerTest {
                 () -> client.get().uri("/api/recipes/abc").retrieve().body(String.class));
         assertThat(e.getStatusCode().value()).isEqualTo(400);
         assertThat(e.getResponseBodyAsString()).contains("입력값이 올바르지 않습니다.");
+    }
+
+    private MultipartBodyBuilder updateBody() {
+        MultipartBodyBuilder b = new MultipartBodyBuilder();
+        b.part("recipeTitle", "김치찌개");
+        b.part("recipeInfo", "묵은지로 끓인 김치찌개");
+        b.part("materialList[0].materialName", "묵은지");   // materialNo 없음 → 신규
+        b.part("materialList[0].amount", "250g");
+        b.part("stepList[0].stepOrder", "1");
+        b.part("stepList[0].stepInfo", "재료를 볶고 물을 붓는다");
+        return b;
+    }
+
+    // 수정 end-to-end: 실제 톰캣 + JwtFilter 인증 통과 → 작성자 본인(memberNo=42)이면 200, RECIPES UPDATE 도달.
+    @Test
+    @DisplayName("실서버 PATCH /api/recipes/{id} → 작성자 본인이면 200, RECIPES UPDATE 호출")
+    void updateRecipe_realServer() {
+        when(recipeMapper.getRecipeByNo(5L)).thenReturn(Recipe.builder()
+                .recipeNo(5L).memberNo(42L)
+                .recipeMainImg("old.jpg")
+                .recipesImgPath("https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/42/old.jpg")
+                .delYn("N").build());
+
+        var res = client.patch().uri("/api/recipes/5")
+                .header(HttpHeaders.AUTHORIZATION, bearer)
+                .contentType(MediaType.MULTIPART_FORM_DATA)
+                .body(updateBody().build())
+                .retrieve()
+                .toEntity(String.class);
+
+        assertThat(res.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(res.getBody()).contains("\"code\":200").contains("레시피 수정 성공했습니다.");
+        Mockito.verify(recipeMapper).updateRecipe(any());
+    }
+
+    // 인가: 남의 레시피(memberNo=999)를 수정하려 하면 403, RECIPES UPDATE 미도달.
+    @Test
+    @DisplayName("실서버 PATCH: 작성자 본인이 아니면 403, RECIPES UPDATE 미호출")
+    void updateRecipe_notOwner_forbidden() {
+        when(recipeMapper.getRecipeByNo(5L)).thenReturn(Recipe.builder()
+                .recipeNo(5L).memberNo(999L).delYn("N").build());
+
+        try {
+            client.patch().uri("/api/recipes/5")
+                    .header(HttpHeaders.AUTHORIZATION, bearer)
+                    .contentType(MediaType.MULTIPART_FORM_DATA)
+                    .body(updateBody().build())
+                    .retrieve().toBodilessEntity();
+        } catch (RestClientResponseException e) {
+            assertThat(e.getStatusCode().value()).isEqualTo(403);
+            assertThat(e.getResponseBodyAsString()).contains("권한이 없습니다.");
+        }
+
+        Mockito.verify(recipeMapper, Mockito.never()).updateRecipe(any());
     }
 }

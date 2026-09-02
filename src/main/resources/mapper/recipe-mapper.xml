@@ -167,6 +167,7 @@
     <select id="getRecipeDetail" resultType="com.allergyout.recipe.model.dto.RecipeDetailItem">
         SELECT
                r.RECIPE_NO
+            ,  r.MEMBER_NO
             ,  r.RECIPE_TITLE
             ,  r.RECIPE_INFO
             ,  r.RECIPE_MAIN_IMG
@@ -199,7 +200,7 @@
                MATERIAL_NO
     </select>
 
-    <!-- 조리 단계 목록 (STEP_ORDER 오름차순). STEP_IMG_PATH = S3 버킷 URL -->
+    <!-- 조리 단계 목록 (STEP_ORDER 오름차순). STEP_IMG_PATH = S3 버킷 URL. 상세 조회 + 수정 대조에 공용 -->
     <select id="getStepsByRecipeNo" resultType="com.allergyout.recipe.model.vo.RecipeStep">
         SELECT
                STEP_NO
@@ -215,5 +216,94 @@
          ORDER BY
                STEP_ORDER
     </select>
+
+    <!-- ========================================================================
+         레시피 수정 (PATCH /api/recipes/{recipeNo}) : "최종 상태 기반" 갱신
+         재료·단계 목록 로드는 위 getMaterialsByRecipeNo / getStepsByRecipeNo 재사용
+         ======================================================================== -->
+
+    <!-- 수정 대상 조회 : 소유자(MEMBER_NO) 확인 + 기존 이미지 값(대표 이미지 미변경 시 재입력용) 확보 -->
+    <select id="getRecipeByNo" resultType="com.allergyout.recipe.model.vo.Recipe">
+        SELECT
+               RECIPE_NO
+            ,  MEMBER_NO
+            ,  RECIPE_TITLE
+            ,  RECIPE_INFO
+            ,  RECIPE_MAIN_IMG
+            ,  RECIPES_IMG_PATH
+            ,  CREATE_DATE
+            ,  DEL_YN
+          FROM
+               RECIPES
+         WHERE
+               RECIPE_NO = #{recipeNo}
+           AND DEL_YN    = 'N'
+    </select>
+
+    <!-- RECIPES 본문 UPDATE. 이미지 컬럼 2개도 항상 채운다 (대표 이미지 미변경이면 Service 가 기존 값을 재입력).
+         동적 SQL 없이 고정 쿼리 1개. RECIPE_MAIN_IMG = 원본 파일명 / RECIPES_IMG_PATH = S3 버킷 URL. -->
+    <update id="updateRecipe">
+        UPDATE
+               RECIPES
+           SET
+               RECIPE_TITLE     = #{recipeTitle}
+            ,  RECIPE_INFO      = #{recipeInfo}
+            ,  RECIPE_MAIN_IMG  = #{recipeMainImg}
+            ,  RECIPES_IMG_PATH = #{recipesImgPath}
+         WHERE
+               RECIPE_NO = #{recipeNo}
+           AND DEL_YN    = 'N'
+    </update>
+
+    <update id="updateMaterial">
+        UPDATE
+               MATERIAL
+           SET
+               MATERIAL_NAME = #{materialName}
+            ,  AMOUNT        = #{amount}
+         WHERE
+               MATERIAL_NO = #{materialNo}
+    </update>
+
+    <delete id="deleteMaterial">
+        DELETE
+          FROM
+               MATERIAL
+         WHERE
+               MATERIAL_NO = #{materialNo}
+    </delete>
+
+    <!-- STEP_IMG = 원본 파일명 / STEP_IMG_PATH = S3 버킷 URL. 이미지 미변경이면 Service 가 기존 값을 재입력.
+         null 가능성 있어 jdbcType=VARCHAR 명시. -->
+    <update id="updateRecipeStep">
+        UPDATE
+               RECIPE_STEPS
+           SET
+               STEP_INFO     = #{stepInfo}
+            ,  STEP_IMG      = #{stepImg, jdbcType=VARCHAR}
+            ,  STEP_ORDER    = #{stepOrder}
+            ,  STEP_IMG_PATH = #{stepImgPath, jdbcType=VARCHAR}
+         WHERE
+               STEP_NO = #{stepNo}
+    </update>
+
+    <delete id="deleteRecipeStep">
+        DELETE
+          FROM
+               RECIPE_STEPS
+         WHERE
+               STEP_NO = #{stepNo}
+    </delete>
+
+    <!-- UNIQUE(RECIPE_NO, STEP_ORDER) 충돌 회피 : 삭제 후 남은 기존 단계들의 STEP_ORDER 를
+         잠깐 +1000 밀어두고, 이어서 요청 최종값(1..N)으로 다시 UPDATE 한다. +1000 은 트랜잭션 내 임시값. -->
+    <update id="bumpStepOrders">
+        UPDATE
+               RECIPE_STEPS
+           SET
+               STEP_ORDER = STEP_ORDER + 1000
+         WHERE
+               RECIPE_NO = #{recipeNo}
+    </update>
 
 </mapper>
