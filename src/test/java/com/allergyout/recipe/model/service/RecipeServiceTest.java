@@ -29,12 +29,16 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.allergyout.global.exception.CustomException;
+import com.allergyout.global.exception.ErrorCode;
 import com.allergyout.recipe.model.dao.RecipeMapper;
 import com.allergyout.recipe.model.dto.MaterialCreateRequest;
 import com.allergyout.recipe.model.dto.RecipeCreateRequest;
+import com.allergyout.recipe.model.dto.RecipeDetailItem;
+import com.allergyout.recipe.model.dto.RecipeDetailResponse;
 import com.allergyout.recipe.model.dto.RecipeListItem;
 import com.allergyout.recipe.model.dto.RecipeListResponse;
 import com.allergyout.recipe.model.dto.StepCreateRequest;
+import com.allergyout.recipe.model.vo.Material;
 import com.allergyout.recipe.model.vo.RecipeStep;
 import com.allergyout.s3.S3Service;
 
@@ -140,9 +144,9 @@ class RecipeServiceTest {
     }
 
     // 스텝 이미지가 있으면: recipes/steps 디렉터리 + recipeNo 키로 업로드하고,
-    // 리턴된 URL 은 STEP_IMG 에, 원본 파일명은 STEP_IMG_PATH 에 담기는지.
+    // 원본 파일명은 STEP_IMG 에, 리턴된 S3 URL 은 STEP_IMG_PATH 에 담기는지.
     @Test
-    @DisplayName("스텝 이미지 있으면 recipes/steps 디렉터리로 업로드하고 STEP_IMG에 URL 저장")
+    @DisplayName("스텝 이미지 있으면 recipes/steps 디렉터리로 업로드하고 STEP_IMG=원본명·STEP_IMG_PATH=URL 저장")
     void createRecipe_withStepImg_uploadsAndSavesUrl() {
         when(s3Service.upload(any(), eq("recipes"), anyLong())).thenReturn(MAIN_URL);
         when(s3Service.upload(any(), eq("recipes/steps"), anyLong())).thenReturn(STEP_URL);
@@ -154,8 +158,8 @@ class RecipeServiceTest {
 
         ArgumentCaptor<RecipeStep> captor = ArgumentCaptor.forClass(RecipeStep.class);
         verify(recipeMapper).insertRecipeStep(captor.capture());
-        assertThat(captor.getValue().getStepImg()).isEqualTo(STEP_URL);
-        assertThat(captor.getValue().getStepImgPath()).isEqualTo("photo.jpg");
+        assertThat(captor.getValue().getStepImg()).isEqualTo("photo.jpg");   // STEP_IMG = 원본 파일명
+        assertThat(captor.getValue().getStepImgPath()).isEqualTo(STEP_URL);  // STEP_IMG_PATH = S3 URL
         verify(s3Service).upload(any(), eq("recipes/steps"), eq(100L));
     }
 
@@ -184,8 +188,8 @@ class RecipeServiceTest {
     @DisplayName("목록 조회(비회원): 비회원 매퍼 호출 + offset·pageInfo 계산")
     void getRecipeList_guest() {
         List<RecipeListItem> rows = List.of(
-                new RecipeListItem(2L, "김치찌개", "url2", "관리자", LocalDate.of(2026, 8, 21)),
-                new RecipeListItem(1L, "된장국", "url1", "관리자", LocalDate.of(2026, 8, 20)));
+                new RecipeListItem(2L, "김치찌개", "kimchi.jpg", "https://img/2.jpg", "관리자", LocalDate.of(2026, 8, 21)),
+                new RecipeListItem(1L, "된장국", "doenjang.jpg", "https://img/1.jpg", "관리자", LocalDate.of(2026, 8, 20)));
         when(recipeMapper.getRecipeList(20, 10)).thenReturn(rows); // page 2 * size 10 = offset 20
         when(recipeMapper.countRecipeList()).thenReturn(37);
 
@@ -227,5 +231,57 @@ class RecipeServiceTest {
     void getRecipeList_sizeTooLarge() {
         assertThatThrownBy(() -> recipeService.getRecipeList(0, 51, null))
                 .isInstanceOf(CustomException.class);
+    }
+
+    // ---- 상세 조회 ----
+
+    private RecipeDetailItem detailRow() {
+        return new RecipeDetailItem(5L, "된장국", "나트륨 줄인 된장국",
+                "main.jpg",                                                         // RECIPE_MAIN_IMG  (원본명)
+                "https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/7/main.jpg", // RECIPES_IMG_PATH (URL)
+                "관리자", LocalDate.of(2026, 8, 21), false);
+    }
+
+    // 정상: recipe + materials + steps 를 매퍼 3개에서 받아 조립. steps 는 매퍼 정렬 순서 유지.
+    @Test
+    @DisplayName("상세 조회: 3개 쿼리 결과를 recipe/materials/steps 로 조립")
+    void getRecipe_assembles() {
+        when(recipeMapper.getRecipeDetail(5L)).thenReturn(detailRow());
+        when(recipeMapper.getMaterialsByRecipeNo(5L)).thenReturn(List.of(
+                Material.builder().materialNo(1L).recipeNo(5L).materialName("두부").amount("20g").build(),
+                Material.builder().materialNo(2L).recipeNo(5L).materialName("감자").amount("10g").build()));
+        when(recipeMapper.getStepsByRecipeNo(5L)).thenReturn(List.of(
+                RecipeStep.builder().stepNo(10L).recipeNo(5L).stepInfo("썬다").stepOrder(1)
+                        .stepImg("s1.jpg").stepImgPath("https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/steps/5/s1.jpg").build(),
+                RecipeStep.builder().stepNo(11L).recipeNo(5L).stepInfo("끓인다").stepOrder(2).build()));
+
+        RecipeDetailResponse res = recipeService.getRecipe(5L);
+
+        assertThat(res.recipe().recipeNo()).isEqualTo(5L);
+        assertThat(res.recipe().recipeMainImg()).isEqualTo("main.jpg");    // RECIPE_MAIN_IMG (원본명)
+        assertThat(res.recipe().recipesImgPath()).startsWith("https://");  // RECIPES_IMG_PATH (버킷 URL)
+        assertThat(res.recipe().isBookmarked()).isFalse();                 // 미구현 → false
+        assertThat(res.materials()).extracting(m -> m.materialName()).containsExactly("두부", "감자");
+        assertThat(res.steps()).hasSize(2);
+        assertThat(res.steps().get(0).stepImg()).isEqualTo("s1.jpg");      // STEP_IMG (원본명)
+        assertThat(res.steps().get(0).stepImgPath())
+                .isEqualTo("https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/steps/5/s1.jpg"); // STEP_IMG_PATH (URL)
+        assertThat(res.steps().get(1).stepImg()).isNull();                 // 이미지 없는 단계
+        assertThat(res.steps().get(1).stepImgPath()).isNull();
+        assertThat(res.steps().get(1).stepInfo()).isEqualTo("끓인다");
+    }
+
+    // 없는 레시피 → RECIPE_NOT_FOUND, 재료·단계 쿼리는 아예 안 나감
+    @Test
+    @DisplayName("상세 조회: 없는 레시피면 RECIPE_NOT_FOUND, 자식 쿼리 미실행")
+    void getRecipe_notFound() {
+        when(recipeMapper.getRecipeDetail(999L)).thenReturn(null);
+
+        assertThatThrownBy(() -> recipeService.getRecipe(999L))
+                .isInstanceOfSatisfying(CustomException.class,
+                        ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.RECIPE_NOT_FOUND));
+
+        verify(recipeMapper, never()).getMaterialsByRecipeNo(anyLong());
+        verify(recipeMapper, never()).getStepsByRecipeNo(anyLong());
     }
 }

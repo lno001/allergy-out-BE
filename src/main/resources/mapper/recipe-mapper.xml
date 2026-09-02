@@ -65,12 +65,14 @@
 			    )
     </insert>
 
-    <!-- ========== 비회원 목록 : 삭제만 제외, 최신순, OFFSET 페이징 ========== -->
+    <!-- ========== 비회원 목록 : 삭제만 제외, 최신순, OFFSET 페이징 ==========
+         RECIPE_MAIN_IMG = 원본 파일명 / RECIPES_IMG_PATH = S3 버킷 URL. 프론트 썸네일은 PATH 를 씀. -->
     <select id="getRecipeList" resultType="RecipeListItem">
         SELECT
                r.RECIPE_NO
             ,  r.RECIPE_TITLE
             ,  r.RECIPE_MAIN_IMG
+            ,  r.RECIPES_IMG_PATH
             ,  m.MEMBER_NAME
             ,  r.CREATE_DATE
           FROM
@@ -105,13 +107,14 @@
                r.RECIPE_NO
             ,  r.RECIPE_TITLE
             ,  r.RECIPE_MAIN_IMG
+            ,  r.RECIPES_IMG_PATH
             ,  m.MEMBER_NAME
             ,  r.CREATE_DATE
           FROM
                RECIPES r
           JOIN
                MEMBER  m
-            ON 
+            ON
                r.MEMBER_NO = m.MEMBER_NO
          WHERE
                r.DEL_YN = 'N'
@@ -152,6 +155,65 @@
                     WHERE
                           ma.MEMBER_NO = #{memberNo}
                )
+    </select>
+
+    <!-- ========================================================================
+         상세 조회 (GET /api/recipes/{recipeNo}) : 다중 쿼리 + Service 조립
+         ======================================================================== -->
+
+    <!-- recipe 객체. RECIPE_MAIN_IMG(원본명) + RECIPES_IMG_PATH(S3 버킷 URL) 둘 다 내려준다 (별칭 안 씀).
+         isBookmarked 는 현재 0(false) 고정 — 즐겨찾기 기능 구현 시 Service 에서 실제 판정으로 교체
+         (그때 아래 '0 AS IS_BOOKMARKED' 도 제거). -->
+    <select id="getRecipeDetail" resultType="com.allergyout.recipe.model.dto.RecipeDetailItem">
+        SELECT
+               r.RECIPE_NO
+            ,  r.RECIPE_TITLE
+            ,  r.RECIPE_INFO
+            ,  r.RECIPE_MAIN_IMG
+            ,  r.RECIPES_IMG_PATH
+            ,  m.MEMBER_NAME
+            ,  r.CREATE_DATE
+            ,  0 AS IS_BOOKMARKED
+          FROM
+               RECIPES r
+          JOIN
+               MEMBER  m
+            ON r.MEMBER_NO = m.MEMBER_NO
+         WHERE
+               r.RECIPE_NO = #{recipeNo}
+           AND r.DEL_YN    = 'N'
+    </select>
+
+    <!-- 재료 목록 -->
+    <select id="getMaterialsByRecipeNo" resultType="com.allergyout.recipe.model.vo.Material">
+        SELECT
+               MATERIAL_NO
+            ,  RECIPE_NO
+            ,  MATERIAL_NAME
+            ,  AMOUNT
+          FROM
+               MATERIAL
+         WHERE
+               RECIPE_NO = #{recipeNo}
+         ORDER BY
+               MATERIAL_NO
+    </select>
+
+    <!-- 조리 단계 목록 (STEP_ORDER 오름차순). STEP_IMG_PATH = S3 버킷 URL -->
+    <select id="getStepsByRecipeNo" resultType="com.allergyout.recipe.model.vo.RecipeStep">
+        SELECT
+               STEP_NO
+            ,  RECIPE_NO
+            ,  STEP_INFO
+            ,  STEP_IMG
+            ,  STEP_ORDER
+            ,  STEP_IMG_PATH
+          FROM
+               RECIPE_STEPS
+         WHERE
+               RECIPE_NO = #{recipeNo}
+         ORDER BY
+               STEP_ORDER
     </select>
 
 </mapper>

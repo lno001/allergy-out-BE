@@ -40,6 +40,7 @@ import com.allergyout.global.security.JwtUtil;
 import com.allergyout.member.model.dao.MemberMapper;
 import com.allergyout.member.model.vo.Member;
 import com.allergyout.recipe.model.dao.RecipeMapper;
+import com.allergyout.recipe.model.dto.RecipeDetailItem;
 import com.allergyout.recipe.model.dto.RecipeListItem;
 import com.allergyout.recipe.model.vo.Material;
 import com.allergyout.recipe.model.vo.RecipeStep;
@@ -139,7 +140,7 @@ class RecipeApiServerTest {
         assertThat(recipeCap.getValue())
                 .containsEntry("memberNo", 42L)                 // ← 인증 principal에서 온 값
                 .containsEntry("recipeTitle", "된장국")
-                .containsEntry("recipesImgPath", "main.jpg");
+                .containsEntry("recipeMainImg", "main.jpg");     // RECIPE_MAIN_IMG = 원본 파일명
 
         ArgumentCaptor<Material> matCap = ArgumentCaptor.forClass(Material.class);
         Mockito.verify(recipeMapper, Mockito.times(2)).insertMaterial(matCap.capture());
@@ -148,8 +149,8 @@ class RecipeApiServerTest {
 
         ArgumentCaptor<RecipeStep> stepCap = ArgumentCaptor.forClass(RecipeStep.class);
         Mockito.verify(recipeMapper, Mockito.times(2)).insertRecipeStep(stepCap.capture());
-        assertThat(stepCap.getAllValues().get(0).getStepImgPath()).isEqualTo("s0.jpg");
-        assertThat(stepCap.getAllValues().get(0).getStepImg()).isNotNull();
+        assertThat(stepCap.getAllValues().get(0).getStepImg()).isEqualTo("s0.jpg");     // STEP_IMG = 원본 파일명
+        assertThat(stepCap.getAllValues().get(0).getStepImgPath()).isNotNull();         // STEP_IMG_PATH = S3 URL
         assertThat(stepCap.getAllValues().get(1).getStepImg()).isNull();
         assertThat(stepCap.getAllValues().get(1).getStepImgPath()).isNull();
     }
@@ -204,7 +205,9 @@ class RecipeApiServerTest {
     @DisplayName("실서버 GET /api/recipes → 200, recipes + pageInfo, createDate 포맷")
     void getRecipeList_realServer() {
         when(recipeMapper.getRecipeList(0, 20)).thenReturn(List.of(
-                new RecipeListItem(101L, "된장국", "https://img/101.jpg", "관리자", LocalDate.of(2026, 8, 21))));
+                new RecipeListItem(101L, "된장국", "doenjang.jpg",
+                        "https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/1/101.jpg",
+                        "관리자", LocalDate.of(2026, 8, 21))));
         when(recipeMapper.countRecipeList()).thenReturn(37);
 
         String body = client.get().uri("/api/recipes")
@@ -215,10 +218,68 @@ class RecipeApiServerTest {
                 .contains("\"code\":200")
                 .contains("레시피 목록 조회 성공했습니다.")
                 .contains("\"recipeNo\":101")
+                .contains("\"recipeMainImg\":\"doenjang.jpg\"")   // 원본 파일명
+                .contains("\"recipesImgPath\":\"https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/1/101.jpg\"")
                 .contains("\"memberName\":\"관리자\"")
                 .contains("\"createDate\":\"2026-08-21\"")
                 .contains("\"totalElements\":37")
                 .contains("\"totalPages\":2")
                 .contains("\"offset\":0");
+    }
+
+    // 상세 조회 end-to-end: GET /api/recipes/{id} → 200, data.recipe/materials/steps.
+    // 이미지는 원본명(*Img) + 버킷 URL(*ImgPath) 둘 다. isBookmarked 필드명 그대로. 인증 없이도 됨.
+    @Test
+    @DisplayName("실서버 GET /api/recipes/{id} → 200, recipe+materials+steps, 이미지 원본명·URL 둘 다")
+    void getRecipe_realServer() {
+        when(recipeMapper.getRecipeDetail(5L)).thenReturn(new RecipeDetailItem(
+                5L, "된장국", "나트륨 줄인 된장국",
+                "main.jpg",                                                          // RECIPE_MAIN_IMG  (원본명)
+                "https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/7/main.jpg",  // RECIPES_IMG_PATH (URL)
+                "관리자", LocalDate.of(2026, 8, 21), false));
+        when(recipeMapper.getMaterialsByRecipeNo(5L)).thenReturn(List.of(
+                Material.builder().materialNo(1L).recipeNo(5L).materialName("두부").amount("20g").build()));
+        when(recipeMapper.getStepsByRecipeNo(5L)).thenReturn(List.of(
+                RecipeStep.builder().stepNo(10L).recipeNo(5L).stepInfo("썬다").stepOrder(1)
+                        .stepImg("s1.jpg")
+                        .stepImgPath("https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/steps/5/s1.jpg").build()));
+
+        String body = client.get().uri("/api/recipes/5").retrieve().body(String.class);
+
+        assertThat(body)
+                .contains("\"code\":200")
+                .contains("레시피 상세 조회 성공했습니다.")
+                .contains("\"recipeNo\":5")
+                .contains("\"recipeMainImg\":\"main.jpg\"")
+                .contains("\"recipesImgPath\":\"https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/7/main.jpg\"")
+                .contains("\"isBookmarked\":false")
+                .contains("\"materialName\":\"두부\"")
+                .contains("\"stepOrder\":1")
+                .contains("\"stepImg\":\"s1.jpg\"")
+                .contains("\"stepImgPath\":\"https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/steps/5/s1.jpg\"");
+    }
+
+    // 없는 레시피 → 404 + 명세서 문구
+    @Test
+    @DisplayName("실서버 GET /api/recipes/{id}: 없는 레시피 → 404")
+    void getRecipe_notFound() {
+        when(recipeMapper.getRecipeDetail(999L)).thenReturn(null);
+
+        RestClientResponseException e = org.junit.jupiter.api.Assertions.assertThrows(
+                RestClientResponseException.class,
+                () -> client.get().uri("/api/recipes/999").retrieve().body(String.class));
+        assertThat(e.getStatusCode().value()).isEqualTo(404);
+        assertThat(e.getResponseBodyAsString()).contains("존재하지 않는 레시피입니다.");
+    }
+
+    // recipeNo 가 숫자가 아니면 → GlobalExceptionHandler 의 타입불일치 핸들러가 400
+    @Test
+    @DisplayName("실서버 GET /api/recipes/abc: 숫자 아님 → 400")
+    void getRecipe_badPathVariable() {
+        RestClientResponseException e = org.junit.jupiter.api.Assertions.assertThrows(
+                RestClientResponseException.class,
+                () -> client.get().uri("/api/recipes/abc").retrieve().body(String.class));
+        assertThat(e.getStatusCode().value()).isEqualTo(400);
+        assertThat(e.getResponseBodyAsString()).contains("입력값이 올바르지 않습니다.");
     }
 }

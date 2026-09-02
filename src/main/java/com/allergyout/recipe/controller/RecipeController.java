@@ -5,6 +5,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -14,6 +15,7 @@ import org.springframework.web.multipart.MultipartFile;
 import com.allergyout.global.common.ApiResponse;
 import com.allergyout.global.security.CustomUserDetails;
 import com.allergyout.recipe.model.dto.RecipeCreateRequest;
+import com.allergyout.recipe.model.dto.RecipeDetailResponse;
 import com.allergyout.recipe.model.dto.RecipeListResponse;
 import com.allergyout.recipe.model.service.RecipeService;
 
@@ -39,6 +41,15 @@ public class RecipeController {
         RecipeListResponse data = recipeService.getRecipeList(page, size, memberNo);
 
         return ResponseEntity.ok(ApiResponse.success("레시피 목록 조회 성공했습니다.", data));
+    }
+
+    // GET /api/recipes/{recipeNo} — 인증 없음. 레시피 1건 상세 (recipe + 재료 + 조리 단계).
+    // recipeNo 가 숫자가 아니면 MethodArgumentTypeMismatchException → GlobalExceptionHandler 가 400.
+    @GetMapping("/{recipeNo}")
+    public ResponseEntity<ApiResponse<RecipeDetailResponse>> getRecipe(
+            @PathVariable("recipeNo") Long recipeNo) {  // 이름 명시 — Eclipse는 -parameters 없이 컴파일해서 필수
+        RecipeDetailResponse data = recipeService.getRecipe(recipeNo);
+        return ResponseEntity.ok(ApiResponse.success("레시피 상세 조회 성공했습니다.", data));
     }
 
     // POST /api/recipes  (multipart/form-data) — 인증 필요, 작성자 = 로그인한 memberNo

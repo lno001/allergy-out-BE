@@ -16,6 +16,8 @@ import com.allergyout.global.exception.ErrorCode;
 import com.allergyout.recipe.model.dao.RecipeMapper;
 import com.allergyout.recipe.model.dto.MaterialCreateRequest;
 import com.allergyout.recipe.model.dto.RecipeCreateRequest;
+import com.allergyout.recipe.model.dto.RecipeDetailItem;
+import com.allergyout.recipe.model.dto.RecipeDetailResponse;
 import com.allergyout.recipe.model.dto.RecipeListItem;
 import com.allergyout.recipe.model.dto.RecipeListResponse;
 import com.allergyout.recipe.model.dto.StepCreateRequest;
@@ -72,21 +74,22 @@ public class RecipeService {
             }
 
             // 4. 조리 단계 (스텝 이미지는 선택 — 없으면 STEP_IMG/STEP_IMG_PATH null)
+            //    컬럼 규칙: STEP_IMG = 원본 파일명 / STEP_IMG_PATH = S3 URL (RECIPE_MAIN_IMG/RECIPES_IMG_PATH 와 동일)
             for (StepCreateRequest s : request.stepList()) {
                 String stepImgUrl = null;
-                String stepImgPath = null;
+                String stepImgName = null;
                 MultipartFile stepImg = s.stepImg();
                 if (stepImg != null && !stepImg.isEmpty()) {
                     stepImgUrl = s3Service.upload(stepImg, DIR_RECIPE_STEP, recipeNo);
                     uploadedKeys.add(extractS3Key(stepImgUrl));
-                    stepImgPath = stepImg.getOriginalFilename();
+                    stepImgName = stepImg.getOriginalFilename();
                 }
                 recipeMapper.insertRecipeStep(RecipeStep.builder()
                         .recipeNo(recipeNo)
                         .stepInfo(s.stepInfo())
-                        .stepImg(stepImgUrl)
+                        .stepImg(stepImgName)      // STEP_IMG = 원본 파일명
                         .stepOrder(s.stepOrder())
-                        .stepImgPath(stepImgPath)
+                        .stepImgPath(stepImgUrl)   // STEP_IMG_PATH = S3 URL
                         .build());
             }
         } catch (RuntimeException e) {
@@ -116,6 +119,27 @@ public class RecipeService {
 
         pageInfo.calculateTotalPage(totalElements);
         return new RecipeListResponse(recipes, pageInfo);
+    }
+
+    // 상세 조회 — 집계 조회이므로 다중 쿼리(recipe ⨝ member / 재료 / 조리 단계) 결과를 조립.
+    // 인증 없음. data = { recipe, materials, steps }
+    @Transactional(readOnly = true)
+    public RecipeDetailResponse getRecipe(Long recipeNo) {
+        RecipeDetailItem recipe = recipeMapper.getRecipeDetail(recipeNo);
+        if (recipe == null) {
+            throw new CustomException(ErrorCode.RECIPE_NOT_FOUND);
+        }
+
+        // isBookmarked 는 현재 매퍼가 false(0) 고정으로 내려준다.
+        // TODO: 즐겨찾기 기능 구현 시 —
+        //   ① RecipeService 에 BookmarkService 주입
+        //   ② Controller getRecipe 에 @AuthenticationPrincipal CustomUserDetails 추가 → memberNo 를 이 메서드로 전달
+        //   ③ 여기서 memberNo != null && bookmarkService.isBookmarked(memberNo, recipeNo) 로 recipe 를 재조립
+        //   ④ recipe-mapper.xml getRecipeDetail 의 '0 AS IS_BOOKMARKED' 제거
+        return RecipeDetailResponse.of(
+                recipe,
+                recipeMapper.getMaterialsByRecipeNo(recipeNo),
+                recipeMapper.getStepsByRecipeNo(recipeNo));
     }
 
     // 형식(기본값·타입)은 Controller @RequestParam, 여기선 값 범위만 (page ≥ 0, 1 ≤ size ≤ 50)

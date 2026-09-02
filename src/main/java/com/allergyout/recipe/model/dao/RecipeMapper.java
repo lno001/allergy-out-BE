@@ -6,6 +6,7 @@ import java.util.Map;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import com.allergyout.recipe.model.dto.RecipeDetailItem;
 import com.allergyout.recipe.model.dto.RecipeListItem;
 import com.allergyout.recipe.model.vo.Material;
 import com.allergyout.recipe.model.vo.RecipeStep;
@@ -33,4 +34,13 @@ public interface RecipeMapper {
                                                 @Param("memberNo") long memberNo);
 
     int countRecipeListForMember(long memberNo);
+
+    // ---- 상세 조회 : 집계 조회이므로 다중 쿼리 + Service 조립 ----
+
+    // RECIPES ⨝ MEMBER, DEL_YN='N'. 없으면 null.
+    RecipeDetailItem getRecipeDetail(long recipeNo);
+
+    List<Material> getMaterialsByRecipeNo(long recipeNo);
+
+    List<RecipeStep> getStepsByRecipeNo(long recipeNo);
 }
