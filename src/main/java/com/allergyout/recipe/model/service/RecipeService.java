@@ -111,25 +111,52 @@ public class RecipeService {
 
     // 목록 조회 — 최신순, OFFSET 페이징. data = { recipes, pageInfo }
     // 비회원(memberNo == null) : 삭제만 제외 / 회원 : 그 회원 알러지 재료가 든 레시피도 제외
+    // keyword 있으면 제목(RECIPE_TITLE)에 포함된 것만 (없으면 전체). 매퍼는 keyword·memberNo 유무로 4갈래 분기.
     @Transactional(readOnly = true)
-    public RecipeListResponse getRecipeList(int page, int size, Long memberNo) {
+    public RecipeListResponse getRecipeList(int page, int size, Long memberNo, String keyword) {
         validatePageParams(page, size);
-        
+
+        // keyword 정규화: null·공백뿐이면 null(전체조회). trim 은 "양쪽 끝" 공백만 없앤다 —
+        // 문자 사이 공백은 그대로 유지되므로 "된 장" 으로 검색하면 "된장" 은 안 잡힌다(명세: keyword = 단어 하나).
+        String kw = normalizeKeyword(keyword);
+
         PageInfo pageInfo = new PageInfo(page, size);
         int offset = pageInfo.getOffset();
 
         List<RecipeListItem> recipes;
         int totalElements;
-        if (memberNo == null) {
+        if (memberNo == null && kw == null) {
             recipes = recipeMapper.getRecipeList(offset, size);
             totalElements = recipeMapper.countRecipeList();
-        } else {
+        } else if (memberNo == null) { // 비회원 + 키워드
+            recipes = recipeMapper.getRecipeListByKeyword(offset, size, kw);
+            totalElements = recipeMapper.countRecipeListByKeyword(kw);
+        } else if (kw == null) {        // 회원 + 키워드 없음
             recipes = recipeMapper.getRecipeListForMember(offset, size, memberNo);
             totalElements = recipeMapper.countRecipeListForMember(memberNo);
+        } else {                        // 회원 + 키워드
+            recipes = recipeMapper.getRecipeListForMemberByKeyword(offset, size, memberNo, kw);
+            totalElements = recipeMapper.countRecipeListForMemberByKeyword(memberNo, kw);
         }
 
         pageInfo.calculateTotalPage(totalElements);
         return new RecipeListResponse(recipes, pageInfo);
+    }
+
+    // 검색어 정규화. 양쪽 끝 공백 제거 후 비었으면 null(= 전체조회).
+    // LIKE 메타문자(\ % _)는 이스케이프해서 "문자 그대로" 검색되게 한다 (쿼리는 ESCAPE '\'). 특수문자 거부 안 함.
+    private String normalizeKeyword(String keyword) {
+        if (keyword == null) {
+            return null;
+        }
+        String trimmed = keyword.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        return trimmed
+                .replace("\\", "\\\\")  // \ 를 먼저 (뒤 치환의 이스케이프 문자와 겹치지 않게)
+                .replace("%", "\\%")
+                .replace("_", "\\_");
     }
 
     // 상세 조회 — 집계 조회이므로 다중 쿼리(recipe ⨝ member / 재료 / 조리 단계) 결과를 조립.

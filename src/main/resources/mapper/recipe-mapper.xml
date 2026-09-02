@@ -142,7 +142,7 @@
                RECIPES r
          WHERE
                r.DEL_YN = 'N'
-           AND r.RECIPE_NO NOT IN 
+           AND r.RECIPE_NO NOT IN
            		(
                    SELECT
                           mat.RECIPE_NO
@@ -150,11 +150,103 @@
                           MATERIAL mat
                      JOIN
                           MEMBER_ALLERGY  ma
-                       ON 
+                       ON
                           mat.MATERIAL_NAME LIKE '%' || ma.MATERIAL_NAME || '%'
                     WHERE
                           ma.MEMBER_NO = #{memberNo}
                )
+    </select>
+
+    <!-- ========== 키워드 검색 (비회원) : 위 비회원 목록 + 제목에 keyword 포함 ==========
+         검색 대상 = RECIPE_TITLE 만 (명세서는 "제목 또는 재료명"이지만 팀 결정으로 제목만).
+         재료명 검색이 필요해지면 아래에 OR EXISTS(MATERIAL ... LIKE) 만 추가하면 됨.
+         keyword 는 Service 에서 LIKE 메타문자(\ % _)를 이스케이프해 넘긴다 → ESCAPE '\' 로 문자 그대로 매칭. -->
+    <select id="getRecipeListByKeyword" resultType="RecipeListItem">
+        SELECT
+               r.RECIPE_NO
+            ,  r.RECIPE_TITLE
+            ,  r.RECIPE_MAIN_IMG
+            ,  r.RECIPES_IMG_PATH
+            ,  m.MEMBER_NAME
+            ,  r.CREATE_DATE
+          FROM
+               RECIPES r
+          JOIN
+               MEMBER  m
+            ON r.MEMBER_NO = m.MEMBER_NO
+         WHERE
+               r.DEL_YN = 'N'
+           AND r.RECIPE_TITLE LIKE '%' || #{keyword} || '%' ESCAPE '\'
+         ORDER BY
+               r.CREATE_DATE DESC
+            ,  r.RECIPE_NO   DESC
+        OFFSET #{offset} ROWS FETCH NEXT #{size} ROWS ONLY
+    </select>
+
+    <select id="countRecipeListByKeyword" resultType="int">
+        SELECT
+               COUNT(*)
+          FROM
+               RECIPES r
+         WHERE
+               r.DEL_YN = 'N'
+           AND r.RECIPE_TITLE LIKE '%' || #{keyword} || '%' ESCAPE '\'
+    </select>
+
+    <!-- ========== 키워드 검색 (회원) : 알러지 재료 제외 + 제목에 keyword 포함 ========== -->
+    <select id="getRecipeListForMemberByKeyword" resultType="RecipeListItem">
+        SELECT
+               r.RECIPE_NO
+            ,  r.RECIPE_TITLE
+            ,  r.RECIPE_MAIN_IMG
+            ,  r.RECIPES_IMG_PATH
+            ,  m.MEMBER_NAME
+            ,  r.CREATE_DATE
+          FROM
+               RECIPES r
+          JOIN
+               MEMBER  m
+            ON
+               r.MEMBER_NO = m.MEMBER_NO
+         WHERE
+               r.DEL_YN = 'N'
+           AND r.RECIPE_NO NOT IN (
+                   SELECT
+                          mat.RECIPE_NO
+                     FROM
+                          MATERIAL        mat
+                     JOIN
+                          MEMBER_ALLERGY  ma
+                       ON mat.MATERIAL_NAME LIKE '%' || ma.MATERIAL_NAME || '%'
+                    WHERE
+                          ma.MEMBER_NO = #{memberNo}
+               )
+           AND r.RECIPE_TITLE LIKE '%' || #{keyword} || '%' ESCAPE '\'
+         ORDER BY
+               r.CREATE_DATE DESC
+            ,  r.RECIPE_NO   DESC
+        OFFSET #{offset} ROWS FETCH NEXT #{size} ROWS ONLY
+    </select>
+
+    <select id="countRecipeListForMemberByKeyword" resultType="int">
+        SELECT
+               COUNT(*)
+          FROM
+               RECIPES r
+         WHERE
+               r.DEL_YN = 'N'
+           AND r.RECIPE_NO NOT IN (
+                   SELECT
+                          mat.RECIPE_NO
+                     FROM
+                          MATERIAL        mat
+                     JOIN
+                          MEMBER_ALLERGY  ma
+                       ON mat.MATERIAL_NAME LIKE '%' || ma.MATERIAL_NAME || '%'
+                    WHERE
+                          ma.MEMBER_NO = #{memberNo}
+               )
+           AND r.RECIPE_TITLE LIKE '%' || #{keyword} || '%' ESCAPE '\'
     </select>
 
     <!-- ========================================================================

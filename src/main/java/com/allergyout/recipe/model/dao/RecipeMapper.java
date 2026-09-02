@@ -36,6 +36,22 @@ public interface RecipeMapper {
 
     int countRecipeListForMember(long memberNo);
 
+    // ---- 키워드 검색 (비회원) : 위 + 제목(RECIPE_TITLE) LIKE. keyword 는 Service 에서 이스케이프 완료(ESCAPE '\') ----
+    List<RecipeListItem> getRecipeListByKeyword(@Param("offset") int offset,
+                                                @Param("size") int size,
+                                                @Param("keyword") String keyword);
+
+    int countRecipeListByKeyword(@Param("keyword") String keyword);
+
+    // ---- 키워드 검색 (회원) : 알러지 제외 + 제목(RECIPE_TITLE) LIKE ----
+    List<RecipeListItem> getRecipeListForMemberByKeyword(@Param("offset") int offset,
+                                                         @Param("size") int size,
+                                                         @Param("memberNo") long memberNo,
+                                                         @Param("keyword") String keyword);
+
+    int countRecipeListForMemberByKeyword(@Param("memberNo") long memberNo,
+                                          @Param("keyword") String keyword);
+
     // ---- 상세 조회 : 집계 조회이므로 다중 쿼리 + Service 조립 ----
 
     // RECIPES ⨝ MEMBER, DEL_YN='N'. 없으면 null.

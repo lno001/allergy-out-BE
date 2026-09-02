@@ -2,6 +2,7 @@ package com.allergyout.recipe;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -226,6 +227,27 @@ class RecipeApiServerTest {
                 .contains("\"totalElements\":37")
                 .contains("\"totalPages\":2")
                 .contains("\"offset\":0");
+    }
+
+    // 키워드 검색 end-to-end: GET /api/recipes?keyword=된장 → 비회원 키워드 매퍼로 라우팅
+    @Test
+    @DisplayName("실서버 GET /api/recipes?keyword=된장 → 200, getRecipeListByKeyword 로 라우팅")
+    void getRecipeList_keyword_realServer() {
+        when(recipeMapper.getRecipeListByKeyword(0, 20, "된장")).thenReturn(List.of(
+                new RecipeListItem(101L, "된장국", "doenjang.jpg",
+                        "https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/1/101.jpg",
+                        "관리자", LocalDate.of(2026, 8, 21))));
+        when(recipeMapper.countRecipeListByKeyword("된장")).thenReturn(1);
+
+        String body = client.get().uri("/api/recipes?keyword=된장")
+                .retrieve()
+                .body(String.class);
+
+        assertThat(body)
+                .contains("\"code\":200")
+                .contains("\"recipeNo\":101")
+                .contains("\"totalElements\":1");
+        Mockito.verify(recipeMapper, Mockito.never()).getRecipeList(anyInt(), anyInt());
     }
 
     // 상세 조회 end-to-end: GET /api/recipes/{id} → 200, data.recipe/materials/steps.

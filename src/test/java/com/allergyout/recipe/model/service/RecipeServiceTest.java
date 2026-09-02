@@ -197,7 +197,7 @@ class RecipeServiceTest {
         when(recipeMapper.getRecipeList(20, 10)).thenReturn(rows); // page 2 * size 10 = offset 20
         when(recipeMapper.countRecipeList()).thenReturn(37);
 
-        RecipeListResponse res = recipeService.getRecipeList(2, 10, null);
+        RecipeListResponse res = recipeService.getRecipeList(2, 10, null, null);
 
         assertThat(res.recipes()).hasSize(2);
         assertThat(res.pageInfo().getOffset()).isEqualTo(20);
@@ -213,7 +213,7 @@ class RecipeServiceTest {
         when(recipeMapper.getRecipeListForMember(0, 20, 7L)).thenReturn(List.of());
         when(recipeMapper.countRecipeListForMember(7L)).thenReturn(0);
 
-        recipeService.getRecipeList(0, 20, 7L);
+        recipeService.getRecipeList(0, 20, 7L, null);
 
         verify(recipeMapper).getRecipeListForMember(0, 20, 7L);
         verify(recipeMapper).countRecipeListForMember(7L);
@@ -224,7 +224,7 @@ class RecipeServiceTest {
     @Test
     @DisplayName("page 음수면 CustomException, 매퍼 미호출")
     void getRecipeList_negativePage() {
-        assertThatThrownBy(() -> recipeService.getRecipeList(-1, 10, null))
+        assertThatThrownBy(() -> recipeService.getRecipeList(-1, 10, null, null))
                 .isInstanceOf(CustomException.class);
         verify(recipeMapper, never()).getRecipeList(anyInt(), anyInt());
     }
@@ -233,8 +233,61 @@ class RecipeServiceTest {
     @Test
     @DisplayName("size가 50 초과면 CustomException")
     void getRecipeList_sizeTooLarge() {
-        assertThatThrownBy(() -> recipeService.getRecipeList(0, 51, null))
+        assertThatThrownBy(() -> recipeService.getRecipeList(0, 51, null, null))
                 .isInstanceOf(CustomException.class);
+    }
+
+    // ---- 키워드 검색 ----
+
+    // 비회원 + keyword : 비회원 키워드 매퍼로 분기, keyword 그대로 전달(특수문자 없으면 이스케이프 영향 없음)
+    @Test
+    @DisplayName("검색(비회원): keyword 있으면 getRecipeListByKeyword 로 분기")
+    void getRecipeList_guestKeyword() {
+        when(recipeMapper.getRecipeListByKeyword(0, 20, "된장")).thenReturn(List.of());
+        when(recipeMapper.countRecipeListByKeyword("된장")).thenReturn(0);
+
+        recipeService.getRecipeList(0, 20, null, "된장");
+
+        verify(recipeMapper).getRecipeListByKeyword(0, 20, "된장");
+        verify(recipeMapper, never()).getRecipeList(anyInt(), anyInt());
+    }
+
+    // 회원 + keyword : 회원 키워드 매퍼(알러지 제외 + 키워드)로 분기
+    @Test
+    @DisplayName("검색(회원): keyword 있으면 getRecipeListForMemberByKeyword 로 분기")
+    void getRecipeList_memberKeyword() {
+        when(recipeMapper.getRecipeListForMemberByKeyword(0, 20, 7L, "된장")).thenReturn(List.of());
+        when(recipeMapper.countRecipeListForMemberByKeyword(7L, "된장")).thenReturn(0);
+
+        recipeService.getRecipeList(0, 20, 7L, "된장");
+
+        verify(recipeMapper).getRecipeListForMemberByKeyword(0, 20, 7L, "된장");
+        verify(recipeMapper, never()).getRecipeListForMember(anyInt(), anyInt(), anyLong());
+    }
+
+    // 공백뿐인 keyword : trim 후 빈 문자열 → null 취급 → 키워드 매퍼 안 타고 전체조회 분기
+    @Test
+    @DisplayName("검색: 공백뿐인 keyword 는 전체조회로 (키워드 매퍼 미호출)")
+    void getRecipeList_blankKeyword_fallsBackToAll() {
+        when(recipeMapper.getRecipeList(0, 20)).thenReturn(List.of());
+        when(recipeMapper.countRecipeList()).thenReturn(0);
+
+        recipeService.getRecipeList(0, 20, null, "   ");
+
+        verify(recipeMapper).getRecipeList(0, 20);
+        verify(recipeMapper, never()).getRecipeListByKeyword(anyInt(), anyInt(), anyString());
+    }
+
+    // LIKE 메타문자(%)는 이스케이프되어 매퍼에 넘어간다 ("50%" → "50\%", 쿼리는 ESCAPE '\')
+    @Test
+    @DisplayName("검색: keyword 의 %·_·\\ 는 이스케이프해서 매퍼에 전달")
+    void getRecipeList_keywordEscaped() {
+        when(recipeMapper.getRecipeListByKeyword(0, 20, "50\\% \\_ \\\\")).thenReturn(List.of());
+        when(recipeMapper.countRecipeListByKeyword("50\\% \\_ \\\\")).thenReturn(0);
+
+        recipeService.getRecipeList(0, 20, null, "  50% _ \\  ");
+
+        verify(recipeMapper).getRecipeListByKeyword(0, 20, "50\\% \\_ \\\\");
     }
 
     // ---- 상세 조회 ----

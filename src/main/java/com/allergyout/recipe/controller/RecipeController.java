@@ -32,16 +32,18 @@ public class RecipeController {
 
     private final RecipeService recipeService;
 
-    // GET /api/recipes?page=0&size=20 — 인증 선택.
+    // GET /api/recipes?page=0&size=20&keyword=된장 — 인증 선택.
     // 비회원도 조회 가능. 로그인이면 그 회원 알러지 재료가 든 레시피는 자동 제외.
+    // keyword 선택 — 있으면 제목에 포함된 레시피만, 없거나 공백뿐이면 전체 조회.
     @GetMapping
     public ResponseEntity<ApiResponse<RecipeListResponse>> getRecipeList(
             @RequestParam(name = "page", defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size,
+            @RequestParam(name = "keyword", required = false) String keyword,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
 
         Long memberNo = (userDetails != null) ? userDetails.getMemberNo() : null;
-        RecipeListResponse data = recipeService.getRecipeList(page, size, memberNo);
+        RecipeListResponse data = recipeService.getRecipeList(page, size, memberNo, keyword);
 
         return ResponseEntity.ok(ApiResponse.success("레시피 목록 조회 성공했습니다.", data));
     }
