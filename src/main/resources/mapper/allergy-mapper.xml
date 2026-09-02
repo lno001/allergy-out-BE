@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.allergyout.allergy.model.dao.AllergyMapper">
+
+    <select id="getAllergyList" resultType="string">
+        SELECT
+                MATERIAL_NAME
+          FROM
+                MEMBER_ALLERGY
+         WHERE
+                MEMBER_NO = #{memberNo}
+      ORDER BY
+                MEMBER_ALLERGY_NO
+    </select>
+
+    <delete id="deleteAllergyList">
+        DELETE
+          FROM
+                MEMBER_ALLERGY
+         WHERE
+
+                MEMBER_NO = #{memberNo}
+    </delete>
+
+    <insert id="insertAllergy">
+        INSERT
+          INTO
+                MEMBER_ALLERGY (MEMBER_NO, MATERIAL_NAME)
+        VALUES
+                (
+				#{memberNo}
+			  , #{materialName}
+			    )
+    </insert>
+
+</mapper>

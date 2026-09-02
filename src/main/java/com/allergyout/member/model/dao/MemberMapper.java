@@ -1,6 +1,5 @@
 package com.allergyout.member.model.dao;
 
-import java.util.List;
 import java.util.Optional;
 
 import org.apache.ibatis.annotations.Mapper;
@@ -32,12 +31,6 @@ public interface MemberMapper {
             @Param("memberImgPath") String memberImgPath);
 
     void updateMemberDelYn(Long memberNo); // 회원 탈퇴 - 소프트 삭제(DEL_YN='Y')
-
-    List<String> getAllergyList(Long memberNo); // MEMBER_ALLERGY.MATERIAL_NAME 목록
-
-    void deleteAllergyList(Long memberNo); // 전체 교체 전 기존 행 삭제
-
-    void insertAllergy(@Param("memberNo") Long memberNo, @Param("materialName") String materialName);
 
     // --- auth (로그인/회원가입) ---
     void insertMember(Member member);

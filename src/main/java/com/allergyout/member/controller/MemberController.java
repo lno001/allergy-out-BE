@@ -14,8 +14,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.allergyout.global.common.ApiResponse;
 import com.allergyout.global.security.CustomUserDetails;
-import com.allergyout.member.model.dto.MemberAllergyResponse;
-import com.allergyout.member.model.dto.MemberAllergyUpdateRequest;
 import com.allergyout.member.model.dto.MemberDeleteRequest;
 import com.allergyout.member.model.dto.MemberEmailResponse;
 import com.allergyout.member.model.dto.MemberEmailUpdateRequest;
@@ -101,20 +99,5 @@ public class MemberController {
             HttpServletResponse response) {
         memberService.deleteMember(user.getMemberNo(), request.memberPwd(), response);
         return ResponseEntity.status(HttpStatus.OK).body(ApiResponse.success("회원 탈퇴가 완료되었습니다.", null));
-    }
-
-    @GetMapping("/allergy")
-    public ResponseEntity<ApiResponse<MemberAllergyResponse>> getAllergyList(
-            @AuthenticationPrincipal CustomUserDetails user) {
-        MemberAllergyResponse data = memberService.getAllergyList(user.getMemberNo());
-        return ResponseEntity.status(HttpStatus.OK).body(ApiResponse.success("알러지 정보 조회 성공", data));
-    }
-
-    @PatchMapping("/allergy")
-    public ResponseEntity<ApiResponse<MemberAllergyResponse>> updateAllergyList(
-            @Valid @RequestBody MemberAllergyUpdateRequest request,
-            @AuthenticationPrincipal CustomUserDetails user) {
-        MemberAllergyResponse data = memberService.updateAllergyList(user.getMemberNo(), request.allergyList());
-        return ResponseEntity.status(HttpStatus.OK).body(ApiResponse.success("알러지 필터 저장 성공", data));
     }
 }
