@@ -529,6 +529,40 @@ class MemberServiceTest {
         }
 
         @Test
+        @DisplayName("100개를 초과하면 INVALID_INPUT_VALUE + allergyList 키 메시지, 삭제/삽입 미호출")
+        void tooMany() {
+            when(memberMapper.getMember(MEMBER_NO)).thenReturn(memberWithoutImg());
+            List<String> tooMany = java.util.stream.IntStream.range(0, 101)
+                    .mapToObj(i -> "재료" + i)
+                    .toList();
+
+            assertThatThrownBy(() -> memberService.updateAllergyList(MEMBER_NO, tooMany))
+                    .isInstanceOf(CustomException.class)
+                    .satisfies(ex -> {
+                        CustomException ce = (CustomException) ex;
+                        assertThat(ce.getErrorCode()).isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+                        assertThat(ce.getDetails())
+                                .containsExactly(entry("allergyList", "알러지 항목은 최대 100개까지 등록할 수 있습니다."));
+                    });
+            verify(memberMapper, never()).deleteAllergyList(any());
+            verify(memberMapper, never()).insertAllergy(any(), any());
+        }
+
+        @Test
+        @DisplayName("정확히 100개면 통과한다 (경계값)")
+        void exactlyMax() {
+            when(memberMapper.getMember(MEMBER_NO)).thenReturn(memberWithoutImg());
+            List<String> exactlyMax = java.util.stream.IntStream.range(0, 100)
+                    .mapToObj(i -> "재료" + i)
+                    .toList();
+
+            MemberAllergyResponse result = memberService.updateAllergyList(MEMBER_NO, exactlyMax);
+
+            assertThat(result.allergyList()).hasSize(100);
+            verify(memberMapper).deleteAllergyList(MEMBER_NO);
+        }
+
+        @Test
         @DisplayName("항목이 30자를 초과하면 INVALID_INPUT_VALUE + 인덱스 필드 메시지, 삭제/삽입 미호출")
         void tooLong() {
             when(memberMapper.getMember(MEMBER_NO)).thenReturn(memberWithoutImg());

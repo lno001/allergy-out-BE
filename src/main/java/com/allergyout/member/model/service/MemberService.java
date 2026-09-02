@@ -36,6 +36,7 @@ public class MemberService {
 
     private static final String MEMBER_IMG_DIR = "members"; // S3 dirName, 하드코딩 상수(요청값 금지)
     private static final int MATERIAL_NAME_MAX_LENGTH = 30; // MEMBER_ALLERGY.MATERIAL_NAME NV(30)
+    private static final int ALLERGY_LIST_MAX_SIZE = 100; // 회원 1명당 등록 가능한 알러지 항목 최대 개수
 
     private final MemberMapper memberMapper;
     private final PasswordEncoder passwordEncoder;
@@ -187,6 +188,10 @@ public class MemberService {
     }
 
     private void validateAllergyList(List<String> allergyList) {
+        if (allergyList.size() > ALLERGY_LIST_MAX_SIZE) {
+            throw new CustomException(ErrorCode.INVALID_INPUT_VALUE, Map.of(
+                    "allergyList", "알러지 항목은 최대 " + ALLERGY_LIST_MAX_SIZE + "개까지 등록할 수 있습니다."));
+        }
         Map<String, String> details = new LinkedHashMap<>();
         Set<String> seen = new HashSet<>();
         for (int i = 0; i < allergyList.size(); i++) {
