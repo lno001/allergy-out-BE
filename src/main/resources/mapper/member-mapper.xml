@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+		"https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.allergyout.member.model.dao.MemberMapper">
 
-    <!-- ============================================================
+<!-- ============================================================
          member 마이페이지
          ============================================================ -->
 
@@ -90,59 +91,57 @@
          auth (로그인/회원가입) - auth 브랜치 병합분
          ============================================================ -->
 
-    <insert id="insertMember">
-        INSERT INTO MEMBER (
-            MEMBER_ID,
-            MEMBER_PWD,
-            MEMBER_NAME,
-            PHONE,
-            EMAIL
-        ) VALUES (
-            #{memberId},
-            #{memberPwd},
-            #{memberName},
-            #{phone},
-            #{email}
-        )
-    </insert>
+	<insert id="insertMember">
+	    INSERT INTO MEMBER (
+	        MEMBER_ID,
+	        MEMBER_PWD,
+	        MEMBER_NAME,
+	        PHONE,
+	        EMAIL
+	    ) VALUES (
+	        #{memberId},
+	        #{memberPwd},
+	        #{memberName},
+	        #{phone},
+	        #{email}
+	    )
+	</insert>
 
     <select id="findByMemberId" resultType="com.allergyout.member.model.vo.Member">
-        SELECT MEMBER_NO,
-               MEMBER_ID,
-               MEMBER_PWD,
-               MEMBER_NAME,
-               PHONE,
-               EMAIL,
-               MEMBER_IMG,
-               ROLE,
-               CREATE_DATE,
-               DEL_YN,
-               MEMBER_IMG_PATH
-          FROM MEMBER
-         WHERE MEMBER_ID = #{memberId}
-           AND DEL_YN = 'N'
-    </select>
+	    SELECT MEMBER_NO,
+	           MEMBER_ID,
+	           MEMBER_PWD,
+	           MEMBER_NAME,
+	           PHONE,
+	           EMAIL,
+	           MEMBER_IMG,
+	           ROLE,
+	           CREATE_DATE,
+	           DEL_YN,
+	           MEMBER_IMG_PATH
+	      FROM MEMBER
+	     WHERE MEMBER_ID = #{memberId}
+	       AND DEL_YN = 'N'
+	</select>
 
-    <select id="existsByMemberId" resultType="boolean">
-        SELECT CASE WHEN COUNT(*) > 0 THEN 1 ELSE 0 END
-          FROM MEMBER
-         WHERE MEMBER_ID = #{memberId}
-    </select>
-
-    <!-- EMAIL/PHONE UNIQUE 제약 제거됨 → 활성 회원(DEL_YN='N') 기준으로만 중복 판정.
-         탈퇴한 회원의 이메일/전화로는 재가입 허용 -->
-    <select id="existsByEmail" resultType="boolean">
-        SELECT CASE WHEN COUNT(*) > 0 THEN 1 ELSE 0 END
-          FROM MEMBER
-         WHERE EMAIL = #{email}
-           AND DEL_YN = 'N'
-    </select>
-
-    <select id="existsByPhone" resultType="boolean">
-        SELECT CASE WHEN COUNT(*) > 0 THEN 1 ELSE 0 END
-          FROM MEMBER
-         WHERE PHONE = #{phone}
-           AND DEL_YN = 'N'
-    </select>
+	<select id="isDuplicateMemberId" resultType="boolean">
+	    SELECT COUNT(*)
+	      FROM MEMBER
+	     WHERE MEMBER_ID = #{memberId}
+	</select>
+	
+	<select id="isDuplicateEmail" resultType="boolean">	
+	    SELECT COUNT(*)
+	      FROM MEMBER
+	     WHERE EMAIL = #{email}
+	       AND DEL_YN = 'N'
+	</select>
+	
+	<select id="isDuplicatePhone" resultType="boolean">
+	    SELECT COUNT(*)
+	      FROM MEMBER
+	     WHERE PHONE = #{phone}
+	       AND DEL_YN = 'N'
+	</select>
 
 </mapper>

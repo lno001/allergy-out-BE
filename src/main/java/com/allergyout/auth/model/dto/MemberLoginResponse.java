@@ -6,5 +6,6 @@ public record MemberLoginResponse(
         String memberId,
         String memberName,
         String role,
-        String memberImg
+        String memberImg,
+        String memberImgPath
 ) {}
