@@ -10,11 +10,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.allergyout.global.common.PageInfo;
 import com.allergyout.global.exception.CustomException;
 import com.allergyout.global.exception.ErrorCode;
 import com.allergyout.recipe.model.dao.RecipeMapper;
 import com.allergyout.recipe.model.dto.MaterialCreateRequest;
 import com.allergyout.recipe.model.dto.RecipeCreateRequest;
+import com.allergyout.recipe.model.dto.RecipeListItem;
+import com.allergyout.recipe.model.dto.RecipeListResponse;
 import com.allergyout.recipe.model.dto.StepCreateRequest;
 import com.allergyout.recipe.model.vo.Material;
 import com.allergyout.recipe.model.vo.RecipeStep;
@@ -37,7 +40,7 @@ public class RecipeService {
 
     @Transactional
     public void createRecipe(RecipeCreateRequest request, MultipartFile mainImg, Long memberNo) {
-        validateCreateRequest(request, mainImg);
+    	validateRecipeCreateRequest(request, mainImg);
 
         // S3는 DB 트랜잭션 밖이라, 흐름 중 예외가 나면 catch에서 올린 파일을 수동으로 지운다.
         List<String> uploadedKeys = new ArrayList<>();
@@ -87,6 +90,36 @@ public class RecipeService {
         } catch (RuntimeException e) {
             deleteQuietly(uploadedKeys);
             throw e;
+        }
+    }
+
+    // 목록 조회 — 최신순, OFFSET 페이징. data = { recipes, pageInfo }
+    // 비회원(memberNo == null) : 삭제만 제외 / 회원 : 그 회원 알러지 재료가 든 레시피도 제외
+    @Transactional(readOnly = true)
+    public RecipeListResponse getRecipeList(int page, int size, Long memberNo) {
+        validatePageParams(page, size);
+        
+        PageInfo pageInfo = new PageInfo(page, size);
+        int offset = pageInfo.getOffset();
+
+        List<RecipeListItem> recipes;
+        int totalElements;
+        if (memberNo == null) {
+            recipes = recipeMapper.getRecipeList(offset, size);
+            totalElements = recipeMapper.countRecipeList();
+        } else {
+            recipes = recipeMapper.getRecipeListForMember(offset, size, memberNo);
+            totalElements = recipeMapper.countRecipeListForMember(memberNo);
+        }
+
+        pageInfo.calculateTotalPage(totalElements);
+        return new RecipeListResponse(recipes, pageInfo);
+    }
+
+    // 형식(기본값·타입)은 Controller @RequestParam, 여기선 값 범위만 (page ≥ 0, 1 ≤ size ≤ 50)
+    private void validatePageParams(int page, int size) {
+        if (page < 0 || size < 1 || size > 50) {
+            throw new CustomException(ErrorCode.INVALID_INPUT_VALUE);
         }
     }
 

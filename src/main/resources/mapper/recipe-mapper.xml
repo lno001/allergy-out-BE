@@ -65,4 +65,93 @@
 			    )
     </insert>
 
+    <!-- ========== 비회원 목록 : 삭제만 제외, 최신순, OFFSET 페이징 ========== -->
+    <select id="getRecipeList" resultType="RecipeListItem">
+        SELECT
+               r.RECIPE_NO
+            ,  r.RECIPE_TITLE
+            ,  r.RECIPE_MAIN_IMG
+            ,  m.MEMBER_NAME
+            ,  r.CREATE_DATE
+          FROM
+               RECIPES r
+          JOIN
+               MEMBER  m
+            ON r.MEMBER_NO = m.MEMBER_NO
+         WHERE
+               r.DEL_YN = 'N'
+         ORDER BY
+               r.CREATE_DATE DESC
+            ,  r.RECIPE_NO   DESC
+        OFFSET #{offset} ROWS FETCH NEXT #{size} ROWS ONLY
+    </select>
+
+    <select id="countRecipeList" resultType="int">
+        SELECT
+               COUNT(*)
+          FROM
+               RECIPES
+         WHERE
+               DEL_YN = 'N'
+    </select>
+
+    <!-- ========== 회원 목록 : 삭제 제외 + 회원 알러지 재료가 든 레시피 제외 ==========
+         MATERIAL.MATERIAL_NAME 이 MEMBER_ALLERGY.MATERIAL_NAME 을 "포함"(LIKE '%알러지명%')하면 그 RECIPE_NO 를 NOT IN.
+         - '=' 대신 LIKE : "땅콩" 알러지가 "땅콩버터"·"볶은 땅콩" 도 잡도록. 과잉 필터는 알러지에선 안전 방향(fail-closed).
+         - 저장 시 재료명 공백 정규화 전제 (프론트 + 등록/알러지 저장 Service). "완벽한 필터 아님" 은 프론트 문구로 안내.
+         - MATERIAL.RECIPE_NO 는 NOT NULL 이라 NOT IN 의 NULL 함정 없음. 알러지 0건이면 서브쿼리 0행 → 제외 없음(정상). -->
+    <select id="getRecipeListForMember" resultType="RecipeListItem">
+        SELECT
+               r.RECIPE_NO
+            ,  r.RECIPE_TITLE
+            ,  r.RECIPE_MAIN_IMG
+            ,  m.MEMBER_NAME
+            ,  r.CREATE_DATE
+          FROM
+               RECIPES r
+          JOIN
+               MEMBER  m
+            ON 
+               r.MEMBER_NO = m.MEMBER_NO
+         WHERE
+               r.DEL_YN = 'N'
+           AND r.RECIPE_NO NOT IN (
+                   SELECT
+                          mat.RECIPE_NO
+                     FROM
+                          MATERIAL        mat
+                     JOIN
+                          MEMBER_ALLERGY  ma
+                       ON mat.MATERIAL_NAME LIKE '%' || ma.MATERIAL_NAME || '%'
+                    WHERE
+                          ma.MEMBER_NO = #{memberNo}
+               )
+         ORDER BY
+               r.CREATE_DATE DESC
+            ,  r.RECIPE_NO   DESC
+        OFFSET #{offset} ROWS FETCH NEXT #{size} ROWS ONLY
+    </select>
+
+    <select id="countRecipeListForMember" resultType="int">
+        SELECT
+               COUNT(*)
+          FROM
+               RECIPES r
+         WHERE
+               r.DEL_YN = 'N'
+           AND r.RECIPE_NO NOT IN 
+           		(
+                   SELECT
+                          mat.RECIPE_NO
+                     FROM
+                          MATERIAL mat
+                     JOIN
+                          MEMBER_ALLERGY  ma
+                       ON 
+                          mat.MATERIAL_NAME LIKE '%' || ma.MATERIAL_NAME || '%'
+                    WHERE
+                          ma.MEMBER_NO = #{memberNo}
+               )
+    </select>
+
 </mapper>
