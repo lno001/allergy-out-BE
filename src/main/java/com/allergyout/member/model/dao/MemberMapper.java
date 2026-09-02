@@ -37,9 +37,9 @@ public interface MemberMapper {
 
     Optional<Member> findByMemberId(String memberId);
 
-    boolean existsByMemberId(String memberId);
+    boolean isDuplicateMemberId(String memberId);
 
-    boolean existsByEmail(String email);
+    boolean isDuplicateEmail(String email);
 
-    boolean existsByPhone(String phone);
+    boolean isDuplicatePhone(String phone);
 }
