@@ -16,4 +16,31 @@
         VALUES (#{memberNo}, #{recipeNo})
     </insert>
 
+    <!-- 내 즐겨찾기 목록 — 북마크한 날짜(BOOKMARK.CREATE_DATE) 최신순, OFFSET 페이징.
+         삭제된 레시피(RECIPES.DEL_YN='Y')는 제외. RECIPE_MAIN_IMG = 원본 파일명 /
+         RECIPES_IMG_PATH = S3 버킷 URL(프론트 썸네일). CREATE_DATE = 레시피 작성일. -->
+    <select id="getBookmarkList" resultType="BookmarkListItem">
+        SELECT r.RECIPE_NO
+             , r.RECIPE_TITLE
+             , r.RECIPE_MAIN_IMG
+             , r.RECIPES_IMG_PATH
+             , m.MEMBER_NAME
+             , r.CREATE_DATE
+          FROM BOOKMARK b
+          JOIN RECIPES  r ON b.RECIPE_NO = r.RECIPE_NO
+          JOIN MEMBER   m ON r.MEMBER_NO = m.MEMBER_NO
+         WHERE b.MEMBER_NO = #{memberNo}
+           AND r.DEL_YN = 'N'
+         ORDER BY b.CREATE_DATE DESC, b.RECIPE_NO DESC
+        OFFSET #{offset} ROWS FETCH NEXT #{size} ROWS ONLY
+    </select>
+
+    <select id="countBookmarkList" resultType="int">
+        SELECT COUNT(*)
+          FROM BOOKMARK b
+          JOIN RECIPES  r ON b.RECIPE_NO = r.RECIPE_NO
+         WHERE b.MEMBER_NO = #{memberNo}
+           AND r.DEL_YN = 'N'
+    </select>
+
 </mapper>
