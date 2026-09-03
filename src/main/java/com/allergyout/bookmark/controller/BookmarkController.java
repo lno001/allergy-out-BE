@@ -3,7 +3,9 @@ package com.allergyout.bookmark.controller;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -44,5 +46,15 @@ public class BookmarkController {
             @AuthenticationPrincipal CustomUserDetails user) {
         BookmarkListResponse data = bookmarkService.getBookmarkList(user.getMemberNo(), page, size);
         return ResponseEntity.ok(ApiResponse.success("즐겨찾기 목록을 조회했습니다.", data));
+    }
+
+    // DELETE /api/bookmarks/{recipeNo} — 인증 필요. 내 즐겨찾기 1건 삭제. 대상 없으면 404.
+    // recipeNo 가 숫자가 아니면 MethodArgumentTypeMismatchException → GlobalExceptionHandler 가 400.
+    @DeleteMapping("/{recipeNo}")
+    public ResponseEntity<ApiResponse<Void>> deleteBookmark(
+            @PathVariable("recipeNo") Long recipeNo,  // 이름 명시 — Eclipse는 -parameters 없이 컴파일
+            @AuthenticationPrincipal CustomUserDetails user) {
+        bookmarkService.deleteBookmark(user.getMemberNo(), recipeNo);
+        return ResponseEntity.ok(ApiResponse.success("즐겨찾기를 삭제했습니다.", null));
     }
 }

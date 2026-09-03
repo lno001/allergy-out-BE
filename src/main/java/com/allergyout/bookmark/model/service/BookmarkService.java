@@ -53,6 +53,16 @@ public class BookmarkService {
         return new BookmarkListResponse(recipes, pageInfo);
     }
 
+    // 내 즐겨찾기 1건 삭제. memberNo 는 토큰에서 오므로 WHERE 로 스코프 → 소유자 별도 검증 없음.
+    // 삭제된 행이 0이면 대상 없음 → 404.
+    @Transactional
+    public void deleteBookmark(Long memberNo, Long recipeNo) {
+        int deleted = bookmarkMapper.deleteBookmark(memberNo, recipeNo);
+        if (deleted == 0) {
+            throw new CustomException(ErrorCode.ENTITY_NOT_FOUND);
+        }
+    }
+
     // 형식(기본값·타입)은 Controller @RequestParam, 여기선 값 범위만 (page ≥ 0, 1 ≤ size ≤ 50). recipe 와 동일 로직.
     private void validatePageParams(int page, int size) {
         if (page < 0 || size < 1 || size > 50) {

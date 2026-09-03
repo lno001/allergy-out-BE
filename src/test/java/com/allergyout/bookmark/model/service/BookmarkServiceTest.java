@@ -144,4 +144,24 @@ class BookmarkServiceTest {
         verify(bookmarkMapper, never()).countBookmarkList(any());
         verify(bookmarkMapper, never()).getBookmarkList(anyInt(), anyInt(), anyLong());
     }
+
+    @Test
+    @DisplayName("삭제: 삭제된 행이 1이면 정상 완료")
+    void deleteBookmark_success() {
+        when(bookmarkMapper.deleteBookmark(MEMBER_NO, RECIPE_NO)).thenReturn(1);
+
+        bookmarkService.deleteBookmark(MEMBER_NO, RECIPE_NO);
+
+        verify(bookmarkMapper).deleteBookmark(MEMBER_NO, RECIPE_NO);
+    }
+
+    @Test
+    @DisplayName("삭제: 삭제 대상이 없으면(0행) ENTITY_NOT_FOUND")
+    void deleteBookmark_notFound() {
+        when(bookmarkMapper.deleteBookmark(MEMBER_NO, RECIPE_NO)).thenReturn(0);
+
+        assertThatThrownBy(() -> bookmarkService.deleteBookmark(MEMBER_NO, RECIPE_NO))
+                .isInstanceOfSatisfying(CustomException.class,
+                        ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.ENTITY_NOT_FOUND));
+    }
 }
