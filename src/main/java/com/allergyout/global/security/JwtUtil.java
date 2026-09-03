@@ -78,6 +78,17 @@ public class JwtUtil {
             return false;
         }
     }
+    
+    public boolean isExpiredToken(String token) {
+        try {
+            parseClaims(token);
+            return false;
+        } catch (ExpiredJwtException e) {
+            return true;
+        } catch (JwtException | IllegalArgumentException e) {
+            return false;
+        }
+    }
 
     // 토큰에서 subject(로그인 아이디) 추출
     public String getSubject(String token) {
