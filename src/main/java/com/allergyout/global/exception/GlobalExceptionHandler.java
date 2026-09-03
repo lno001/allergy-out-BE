@@ -8,6 +8,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import com.allergyout.global.common.ApiResponse;
 
@@ -40,6 +41,15 @@ public class GlobalExceptionHandler {
                          .body(ApiResponse.fail(ErrorCode.INVALID_INPUT_VALUE.getStatus().value(), 
                                                 ErrorCode.INVALID_INPUT_VALUE.getMessage(), 
                                                 details));
+	}
+
+	// 경로·쿼리 파라미터 타입 불일치 (예: GET /api/recipes/abc — recipeNo 가 숫자 아님) → 400
+	@ExceptionHandler(MethodArgumentTypeMismatchException.class)
+	public ResponseEntity<ApiResponse<Void>> handleTypeMismatch(MethodArgumentTypeMismatchException e) {
+		log.warn("Type mismatch: {} = {}", e.getName(), e.getValue());
+		return ResponseEntity.status(ErrorCode.INVALID_INPUT_VALUE.getStatus())
+                         .body(ApiResponse.fail(ErrorCode.INVALID_INPUT_VALUE.getStatus().value(),
+                                                ErrorCode.INVALID_INPUT_VALUE.getMessage()));
 	}
 
 	// 예상 못한 나머지 전부

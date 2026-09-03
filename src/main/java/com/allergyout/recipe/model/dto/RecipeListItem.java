@@ -6,7 +6,8 @@ import java.time.LocalDate;
 public record RecipeListItem(
         Long recipeNo,          // RECIPE_NO
         String recipeTitle,     // RECIPE_TITLE
-        String recipeMainImg,   // RECIPE_MAIN_IMG (S3 URL)
+        String recipeMainImg,   // RECIPE_MAIN_IMG  (원본 파일명)
+        String recipesImgPath,  // RECIPES_IMG_PATH (S3 버킷 URL — 프론트 썸네일용)
         String memberName,      // MEMBER.MEMBER_NAME (작성자)
         LocalDate createDate    // CREATE_DATE (yyyy-MM-dd)
 ) {
