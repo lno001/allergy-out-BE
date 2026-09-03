@@ -144,19 +144,58 @@ public class RecipeService {
     }
 
     // 검색어 정규화. 양쪽 끝 공백 제거 후 비었으면 null(= 전체조회).
-    // LIKE 메타문자(\ % _)는 이스케이프해서 "문자 그대로" 검색되게 한다 (쿼리는 ESCAPE '\'). 특수문자 거부 안 함.
     private String normalizeKeyword(String keyword) {
         if (keyword == null) {
             return null;
         }
         String trimmed = keyword.trim();
-        if (trimmed.isEmpty()) {
-            return null;
-        }
-        return trimmed
+        return trimmed.isEmpty() ? null : escapeLike(trimmed);
+    }
+
+    // LIKE 메타문자(\ % _)를 이스케이프해서 "문자 그대로" 검색되게 한다. 쿼리는 ESCAPE '\'. 특수문자 거부는 안 함.
+    private String escapeLike(String value) {
+        return value
                 .replace("\\", "\\\\")  // \ 를 먼저 (뒤 치환의 이스케이프 문자와 겹치지 않게)
                 .replace("%", "\\%")
                 .replace("_", "\\_");
+    }
+
+    // ============================================================
+    //  필터 조회 — 프론트 목록 페이지의 통합 엔드포인트. keyword(제목) + excludeMaterials(제외 재료)를 함께 건다.
+    //  회원이면 본인 알러지 재료가 든 레시피도 제외. 조건 3개 모두 선택(없으면 무시) → 매퍼에서 <if> 로 조립.
+    //  게스트/회원 분기 없이 memberNo·keyword·excludeMaterials 를 그대로 넘긴다 (null/빈값이면 그 조건 생략).
+    // ============================================================
+    @Transactional(readOnly = true)
+    public RecipeListResponse getFilteredRecipeList(int page, int size, Long memberNo,
+                                                    String keyword, List<String> excludeMaterials) {
+        validatePageParams(page, size);
+
+        String kw = normalizeKeyword(keyword);                       // blank → null
+        List<String> excludes = normalizeExcludeMaterials(excludeMaterials); // null/blank 항목 제거, 비면 null
+
+        PageInfo pageInfo = new PageInfo(page, size);
+        int offset = pageInfo.getOffset();
+
+        List<RecipeListItem> recipes = recipeMapper.getFilteredRecipeList(offset, size, memberNo, kw, excludes);
+        int totalElements = recipeMapper.countFilteredRecipeList(memberNo, kw, excludes);
+
+        pageInfo.calculateTotalPage(totalElements);
+        return new RecipeListResponse(recipes, pageInfo);
+    }
+
+    // 제외 재료 목록 정규화: null/blank 항목 제거 + 각 항목 trim + LIKE 이스케이프.
+    // 전부 비면 null 반환 (매퍼 <if> 에서 조건 생략).
+    private List<String> normalizeExcludeMaterials(List<String> excludeMaterials) {
+        if (excludeMaterials == null) {
+            return null;
+        }
+        List<String> cleaned = excludeMaterials.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .map(this::escapeLike)
+                .toList();
+        return cleaned.isEmpty() ? null : cleaned;
     }
 
     // 상세 조회 — 집계 조회이므로 다중 쿼리(recipe ⨝ member / 재료 / 조리 단계) 결과를 조립.

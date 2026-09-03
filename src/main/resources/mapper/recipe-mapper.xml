@@ -250,6 +250,119 @@
     </select>
 
     <!-- ========================================================================
+         필터 조회 (GET /api/recipes/filter) : 프론트 목록 통합 엔드포인트
+         조건 3개를 <if> 로 조립한다 (셋 다 선택 — null/빈값이면 그 AND 절이 통째로 빠짐).
+           1) keyword          : 제목(RECIPE_TITLE) 부분일치
+           2) memberNo != null : 그 회원 알러지 재료가 든 레시피 제외 (기존 회원 목록과 동일 서브쿼리)
+           3) excludeMaterials : 사용자가 고른 제외 재료가 하나라도 든 레시피 제외
+         keyword·excludeMaterials 는 Service 에서 LIKE 메타문자(\ % _)를 이스케이프해 넘긴다 → ESCAPE '\'.
+
+         <foreach> 동작 : excludeMaterials(List<String>) 를 순회하며 각 항목을
+           mat.MATERIAL_NAME LIKE '%' || #{ex} || '%' ESCAPE '\'
+         로 펼치고, open="(" separator=" OR " close=")" 로 감싼다.
+         예) excludeMaterials = ["계란", "우유"] →
+           ( mat.MATERIAL_NAME LIKE '%'||'계란'||'%' ESCAPE '\'
+             OR mat.MATERIAL_NAME LIKE '%'||'우유'||'%' ESCAPE '\' )
+         → 그 재료가 든 RECIPE_NO 집합을 만들어 r.RECIPE_NO NOT IN 으로 뺀다.
+         ======================================================================== -->
+    <select id="getFilteredRecipeList" resultType="RecipeListItem">
+        SELECT
+               r.RECIPE_NO
+            ,  r.RECIPE_TITLE
+            ,  r.RECIPE_MAIN_IMG
+            ,  r.RECIPES_IMG_PATH
+            ,  m.MEMBER_NAME
+            ,  r.CREATE_DATE
+          FROM
+               RECIPES r
+          JOIN
+               MEMBER  m
+            ON r.MEMBER_NO = m.MEMBER_NO
+         <where>
+               r.DEL_YN = 'N'
+
+           <!-- 1) 제목 검색 -->
+           <if test="keyword != null">
+           AND r.RECIPE_TITLE LIKE '%' || #{keyword} || '%' ESCAPE '\'
+           </if>
+
+           <!-- 2) 회원 알러지 재료 제외 -->
+           <if test="memberNo != null">
+           AND r.RECIPE_NO NOT IN (
+                   SELECT
+                          mat.RECIPE_NO
+                     FROM
+                          MATERIAL        mat
+                     JOIN
+                          MEMBER_ALLERGY  ma
+                       ON mat.MATERIAL_NAME LIKE '%' || ma.MATERIAL_NAME || '%'
+                    WHERE
+                          ma.MEMBER_NO = #{memberNo}
+               )
+           </if>
+
+           <!-- 3) 사용자 지정 제외 재료 -->
+           <if test="excludeMaterials != null and excludeMaterials.size() > 0">
+           AND r.RECIPE_NO NOT IN (
+                   SELECT
+                          mat.RECIPE_NO
+                     FROM
+                          MATERIAL mat
+                    WHERE
+                          <foreach collection="excludeMaterials" item="ex" open="(" separator=" OR " close=")">
+                          mat.MATERIAL_NAME LIKE '%' || #{ex} || '%' ESCAPE '\'
+                          </foreach>
+               )
+           </if>
+         </where>
+         ORDER BY
+               r.CREATE_DATE DESC
+            ,  r.RECIPE_NO   DESC
+        OFFSET #{offset} ROWS FETCH NEXT #{size} ROWS ONLY
+    </select>
+
+    <select id="countFilteredRecipeList" resultType="int">
+        SELECT
+               COUNT(*)
+          FROM
+               RECIPES r
+         <where>
+               r.DEL_YN = 'N'
+
+           <if test="keyword != null">
+           AND r.RECIPE_TITLE LIKE '%' || #{keyword} || '%' ESCAPE '\'
+           </if>
+
+           <if test="memberNo != null">
+           AND r.RECIPE_NO NOT IN (
+                   SELECT
+                          mat.RECIPE_NO
+                     FROM
+                          MATERIAL        mat
+                     JOIN
+                          MEMBER_ALLERGY  ma
+                       ON mat.MATERIAL_NAME LIKE '%' || ma.MATERIAL_NAME || '%'
+                    WHERE
+                          ma.MEMBER_NO = #{memberNo}
+               )
+           </if>
+
+           <if test="excludeMaterials != null and excludeMaterials.size() > 0">
+           AND r.RECIPE_NO NOT IN (
+                   SELECT
+                          mat.RECIPE_NO
+                     FROM
+                          MATERIAL mat
+                    WHERE
+                          <foreach collection="excludeMaterials" item="ex" open="(" separator=" OR " close=")">
+                          mat.MATERIAL_NAME LIKE '%' || #{ex} || '%' ESCAPE '\'
+                          </foreach>
+               )
+           </if>
+         </where>
+    </select>
+
+    <!-- ========================================================================
          상세 조회 (GET /api/recipes/{recipeNo}) : 다중 쿼리 + Service 조립
          ======================================================================== -->
 

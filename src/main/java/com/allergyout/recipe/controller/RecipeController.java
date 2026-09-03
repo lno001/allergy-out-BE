@@ -14,6 +14,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.List;
+
 import com.allergyout.global.common.ApiResponse;
 import com.allergyout.global.security.CustomUserDetails;
 import com.allergyout.recipe.model.dto.RecipeCreateRequest;
@@ -44,6 +46,26 @@ public class RecipeController {
 
         Long memberNo = (userDetails != null) ? userDetails.getMemberNo() : null;
         RecipeListResponse data = recipeService.getRecipeList(page, size, memberNo, keyword);
+
+        return ResponseEntity.ok(ApiResponse.success("레시피 목록 조회 성공했습니다.", data));
+    }
+
+    // GET /api/recipes/filter?keyword=된장&excludeMaterials=계란&excludeMaterials=우유&page=0&size=20 — 인증 선택.
+    // 프론트 목록 페이지의 통합 엔드포인트 (검색·필터·둘다·둘다없음).
+    //  - keyword          : 제목(RECIPE_TITLE) 부분일치. 없거나 공백뿐이면 무시
+    //  - excludeMaterials : 그 재료가 하나라도 든 레시피 제외 (LIKE). 없으면 무시
+    //  - 로그인 상태면 그 회원 알러지 재료가 든 레시피도 함께 제외
+    // 조건이 다 없으면 전체 조회(회원은 알러지만). /{recipeNo}(상세)보다 리터럴 "/filter" 가 우선 매칭.
+    @GetMapping("/filter")
+    public ResponseEntity<ApiResponse<RecipeListResponse>> getFilteredRecipeList(
+            @RequestParam(name = "page", defaultValue = "0") int page,
+            @RequestParam(name = "size", defaultValue = "20") int size,
+            @RequestParam(name = "keyword", required = false) String keyword,
+            @RequestParam(name = "excludeMaterials", required = false) List<String> excludeMaterials,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+
+        Long memberNo = (userDetails != null) ? userDetails.getMemberNo() : null;
+        RecipeListResponse data = recipeService.getFilteredRecipeList(page, size, memberNo, keyword, excludeMaterials);
 
         return ResponseEntity.ok(ApiResponse.success("레시피 목록 조회 성공했습니다.", data));
     }

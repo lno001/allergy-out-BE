@@ -250,6 +250,42 @@ class RecipeApiServerTest {
         Mockito.verify(recipeMapper, Mockito.never()).getRecipeList(anyInt(), anyInt());
     }
 
+    // 필터 end-to-end: GET /api/recipes/filter?keyword=&excludeMaterials= → 통합 필터 매퍼로 라우팅.
+    // 인증 없이 호출 → memberNo null 로 매퍼에 전달. excludeMaterials 는 반복 파라미터.
+    @Test
+    @DisplayName("실서버 GET /api/recipes/filter?keyword=된장&excludeMaterials=계란&excludeMaterials=우유 → 200")
+    void getFilteredRecipeList_realServer() {
+        when(recipeMapper.getFilteredRecipeList(0, 20, null, "된장", List.of("계란", "우유")))
+                .thenReturn(List.of(new RecipeListItem(101L, "된장국", "doenjang.jpg",
+                        "https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/1/101.jpg",
+                        "관리자", LocalDate.of(2026, 8, 21))));
+        when(recipeMapper.countFilteredRecipeList(null, "된장", List.of("계란", "우유"))).thenReturn(1);
+
+        String body = client.get().uri("/api/recipes/filter?keyword=된장&excludeMaterials=계란&excludeMaterials=우유")
+                .retrieve()
+                .body(String.class);
+
+        assertThat(body)
+                .contains("\"code\":200")
+                .contains("레시피 목록 조회 성공했습니다.")
+                .contains("\"recipeNo\":101")
+                .contains("\"totalElements\":1");
+    }
+
+    // 필터 라우팅: /filter 가 /{recipeNo}(상세) 로 안 새는지 — "filter" 를 recipeNo 로 안 파싱해야 함
+    @Test
+    @DisplayName("실서버 GET /api/recipes/filter (조건 없음) → 200, 상세 조회로 안 샘")
+    void getFilteredRecipeList_noParams_routesToFilter() {
+        when(recipeMapper.getFilteredRecipeList(0, 20, null, null, null)).thenReturn(List.of());
+        when(recipeMapper.countFilteredRecipeList(null, null, null)).thenReturn(0);
+
+        var res = client.get().uri("/api/recipes/filter").retrieve().toEntity(String.class);
+
+        assertThat(res.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(res.getBody()).contains("\"recipes\":[]").contains("\"totalElements\":0");
+        Mockito.verify(recipeMapper, Mockito.never()).getRecipeDetail(anyLong());
+    }
+
     // 상세 조회 end-to-end: GET /api/recipes/{id} → 200, data.recipe/materials/steps.
     // 이미지는 원본명(*Img) + 버킷 URL(*ImgPath) 둘 다. isBookmarked 필드명 그대로. 인증 없이도 됨.
     @Test

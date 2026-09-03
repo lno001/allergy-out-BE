@@ -52,6 +52,20 @@ public interface RecipeMapper {
     int countRecipeListForMemberByKeyword(@Param("memberNo") long memberNo,
                                           @Param("keyword") String keyword);
 
+    // ---- 필터 조회 : 프론트 목록 통합 엔드포인트. 조건 3개를 <if> 로 조립 ----
+    //  keyword          : null 이면 제목 조건 생략 (Service 에서 이스케이프 완료, 쿼리는 ESCAPE '\')
+    //  memberNo         : null(비회원)이면 알러지 제외 조건 생략. Long 박싱 (원시형이면 <if> null 체크 불가)
+    //  excludeMaterials : null/빈 리스트면 제외 재료 조건 생략. 각 항목 이스케이프 완료
+    List<RecipeListItem> getFilteredRecipeList(@Param("offset") int offset,
+                                               @Param("size") int size,
+                                               @Param("memberNo") Long memberNo,
+                                               @Param("keyword") String keyword,
+                                               @Param("excludeMaterials") List<String> excludeMaterials);
+
+    int countFilteredRecipeList(@Param("memberNo") Long memberNo,
+                                @Param("keyword") String keyword,
+                                @Param("excludeMaterials") List<String> excludeMaterials);
+
     // ---- 상세 조회 : 집계 조회이므로 다중 쿼리 + Service 조립 ----
 
     // RECIPES ⨝ MEMBER, DEL_YN='N'. 없으면 null.

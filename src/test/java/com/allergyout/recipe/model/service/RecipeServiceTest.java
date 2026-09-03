@@ -290,6 +290,50 @@ class RecipeServiceTest {
         verify(recipeMapper).getRecipeListByKeyword(0, 20, "50\\% \\_ \\\\");
     }
 
+    // ---- 필터 조회 (getFilteredRecipeList) — 분기 없이 memberNo·keyword·excludeMaterials 를 매퍼에 전달 ----
+
+    @Test
+    @DisplayName("필터: keyword·excludeMaterials·memberNo 를 정규화해 매퍼에 그대로 전달")
+    void getFilteredRecipeList_passesThrough() {
+        when(recipeMapper.getFilteredRecipeList(0, 20, 7L, "된장", List.of("계란", "우유"))).thenReturn(List.of());
+        when(recipeMapper.countFilteredRecipeList(7L, "된장", List.of("계란", "우유"))).thenReturn(0);
+
+        recipeService.getFilteredRecipeList(0, 20, 7L, " 된장 ", List.of(" 계란 ", "", "  ", "우유"));
+
+        verify(recipeMapper).getFilteredRecipeList(0, 20, 7L, "된장", List.of("계란", "우유"));
+        verify(recipeMapper).countFilteredRecipeList(7L, "된장", List.of("계란", "우유"));
+    }
+
+    @Test
+    @DisplayName("필터: keyword 공백뿐·excludeMaterials 빈 리스트면 둘 다 null 로 전달 (매퍼 <if> 가 조건 생략)")
+    void getFilteredRecipeList_emptyConditionsBecomeNull() {
+        when(recipeMapper.getFilteredRecipeList(0, 20, null, null, null)).thenReturn(List.of());
+        when(recipeMapper.countFilteredRecipeList(null, null, null)).thenReturn(0);
+
+        recipeService.getFilteredRecipeList(0, 20, null, "   ", List.of("  ", ""));
+
+        verify(recipeMapper).getFilteredRecipeList(0, 20, null, null, null);
+    }
+
+    @Test
+    @DisplayName("필터: excludeMaterials 각 항목의 %·_·\\ 도 이스케이프해서 전달")
+    void getFilteredRecipeList_excludeMaterialsEscaped() {
+        when(recipeMapper.getFilteredRecipeList(0, 20, null, null, List.of("계란\\%"))).thenReturn(List.of());
+        when(recipeMapper.countFilteredRecipeList(null, null, List.of("계란\\%"))).thenReturn(0);
+
+        recipeService.getFilteredRecipeList(0, 20, null, null, List.of("계란%"));
+
+        verify(recipeMapper).getFilteredRecipeList(0, 20, null, null, List.of("계란\\%"));
+    }
+
+    @Test
+    @DisplayName("필터: page 범위 밖이면 CustomException, 매퍼 미호출")
+    void getFilteredRecipeList_invalidPage() {
+        assertThatThrownBy(() -> recipeService.getFilteredRecipeList(-1, 20, null, null, null))
+                .isInstanceOf(CustomException.class);
+        verify(recipeMapper, never()).getFilteredRecipeList(anyInt(), anyInt(), any(), any(), any());
+    }
+
     // ---- 상세 조회 ----
 
     private RecipeDetailItem detailRow() {
