@@ -1,7 +1,11 @@
 package com.allergyout.bookmark.model.dao;
 
+import java.util.List;
+
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+
+import com.allergyout.bookmark.model.dto.BookmarkListItem;
 
 @Mapper
 public interface BookmarkMapper {
@@ -11,4 +15,11 @@ public interface BookmarkMapper {
     boolean isDuplicateBookmark(@Param("memberNo") Long memberNo, @Param("recipeNo") Long recipeNo);
 
     void insertBookmark(@Param("memberNo") Long memberNo, @Param("recipeNo") Long recipeNo);
+
+    // 내 즐겨찾기 목록 — 북마크한 날짜 최신순, OFFSET 페이징. 삭제된 레시피(RECIPES.DEL_YN='Y') 제외.
+    List<BookmarkListItem> getBookmarkList(@Param("offset") int offset,
+                                          @Param("size") int size,
+                                          @Param("memberNo") Long memberNo);
+
+    int countBookmarkList(@Param("memberNo") Long memberNo);
 }

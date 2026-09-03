@@ -4,10 +4,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.entry;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+
+import java.time.LocalDate;
+import java.util.List;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -17,6 +22,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.allergyout.bookmark.model.dao.BookmarkMapper;
+import com.allergyout.bookmark.model.dto.BookmarkListItem;
+import com.allergyout.bookmark.model.dto.BookmarkListResponse;
 import com.allergyout.global.exception.CustomException;
 import com.allergyout.global.exception.ErrorCode;
 import com.allergyout.recipe.model.service.RecipeService;
@@ -75,5 +82,66 @@ class BookmarkServiceTest {
 
         verify(bookmarkMapper, never()).isDuplicateBookmark(any(), any());
         verify(bookmarkMapper, never()).insertBookmark(any(), any());
+    }
+
+    private BookmarkListItem item(long recipeNo) {
+        return new BookmarkListItem(recipeNo, "제목" + recipeNo, "img.jpg",
+                "https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/3/img.jpg", "김민재",
+                LocalDate.of(2026, 8, 18));
+    }
+
+    @Test
+    @DisplayName("목록: 북마크가 있으면 recipes + pageInfo 를 조립해 반환한다")
+    void getBookmarkList_success() {
+        when(bookmarkMapper.countBookmarkList(MEMBER_NO)).thenReturn(2);
+        when(bookmarkMapper.getBookmarkList(0, 20, MEMBER_NO)).thenReturn(List.of(item(11), item(12)));
+
+        BookmarkListResponse res = bookmarkService.getBookmarkList(MEMBER_NO, 0, 20);
+
+        assertThat(res.recipes()).hasSize(2);
+        assertThat(res.pageInfo().getTotalElements()).isEqualTo(2);
+        assertThat(res.pageInfo().getTotalPages()).isEqualTo(1);
+        assertThat(res.pageInfo().getOffset()).isZero();
+        verify(bookmarkMapper).getBookmarkList(0, 20, MEMBER_NO);
+    }
+
+    @Test
+    @DisplayName("목록: 북마크 0개면 page 0 은 빈 리스트로 정상 반환(에러 아님)")
+    void getBookmarkList_emptyFirstPage() {
+        when(bookmarkMapper.countBookmarkList(MEMBER_NO)).thenReturn(0);
+        when(bookmarkMapper.getBookmarkList(0, 20, MEMBER_NO)).thenReturn(List.of());
+
+        BookmarkListResponse res = bookmarkService.getBookmarkList(MEMBER_NO, 0, 20);
+
+        assertThat(res.recipes()).isEmpty();
+        assertThat(res.pageInfo().getTotalElements()).isZero();
+        assertThat(res.pageInfo().getTotalPages()).isZero();
+    }
+
+    @Test
+    @DisplayName("목록: 마지막 페이지 초과 조회면 INVALID_INPUT_VALUE + data{page}, 목록 쿼리 미호출")
+    void getBookmarkList_pageOverflow() {
+        when(bookmarkMapper.countBookmarkList(MEMBER_NO)).thenReturn(5);
+
+        assertThatThrownBy(() -> bookmarkService.getBookmarkList(MEMBER_NO, 1, 20))
+                .isInstanceOf(CustomException.class)
+                .satisfies(ex -> {
+                    CustomException ce = (CustomException) ex;
+                    assertThat(ce.getErrorCode()).isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+                    assertThat(ce.getDetails()).containsExactly(entry("page", "존재하지 않는 페이지입니다."));
+                });
+
+        verify(bookmarkMapper, never()).getBookmarkList(anyInt(), anyInt(), anyLong());
+    }
+
+    @Test
+    @DisplayName("목록: size 가 범위 밖(51)이면 INVALID_INPUT_VALUE, count/목록 쿼리 미호출")
+    void getBookmarkList_invalidSize() {
+        assertThatThrownBy(() -> bookmarkService.getBookmarkList(MEMBER_NO, 0, 51))
+                .isInstanceOfSatisfying(CustomException.class,
+                        ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.INVALID_INPUT_VALUE));
+
+        verify(bookmarkMapper, never()).countBookmarkList(any());
+        verify(bookmarkMapper, never()).getBookmarkList(anyInt(), anyInt(), anyLong());
     }
 }
