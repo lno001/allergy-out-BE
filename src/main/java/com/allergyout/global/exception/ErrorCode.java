@@ -22,6 +22,8 @@ public enum ErrorCode {
     ENTITY_NOT_FOUND(HttpStatus.NOT_FOUND, "요청한 리소스를 찾을 수 없습니다."),
     MEMBER_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 회원입니다."),
     RECIPE_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 레시피입니다."),
+    BOOKMARK_NOT_FOUND(HttpStatus.NOT_FOUND, "즐겨찾기하지 않은 레시피입니다."),
+    ALREADY_BOOKMARKED(HttpStatus.CONFLICT, "이미 즐겨찾기한 레시피입니다."),   // 관계 중복 (UNIQUE 값 충돌 아님 → DUPLICATE_VALUE 와 별개)
     UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다."),
     FORBIDDEN(HttpStatus.FORBIDDEN, "권한이 없습니다."),
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다.");
