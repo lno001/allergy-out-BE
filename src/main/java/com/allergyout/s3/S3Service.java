@@ -38,9 +38,9 @@ public class S3Service {
      * 키 형식: {dirName}/{id}/{uuid}_{yyMMdd}.{ext}  (예: recipes/42/3f9a1c2b_260826.jpg)
      */
     public String upload(MultipartFile file, String dirName, Long id) {
-        validate(file);
-
-        String key = generateKey(dirName, id, file.getOriginalFilename());
+    	String extension = validate(file);
+    	
+        String key = generateKey(dirName, id, extension);
 
         try {
             s3Client.putObject(
@@ -78,29 +78,29 @@ public class S3Service {
                 .build());
     }
 
-    private void validate(MultipartFile file) {
+    private String validate(MultipartFile file) {
         if (file == null || file.isEmpty()) {
-            throw new CustomException(ErrorCode.INVALID_INPUT_VALUE);
+            throw new CustomException(ErrorCode.EMPTY_FILE);
         }
         if (file.getSize() > MAX_FILE_SIZE) {
-            throw new CustomException(ErrorCode.INVALID_INPUT_VALUE);
+            throw new CustomException(ErrorCode.FILE_SIZE_EXCEEDED);
         }
         String extension = extractExtension(file.getOriginalFilename());
-        if (!ALLOWED_EXTENSIONS.contains(extension.toLowerCase())) {
-            throw new CustomException(ErrorCode.INVALID_INPUT_VALUE);
+        if (!ALLOWED_EXTENSIONS.contains(extension)) {
+            throw new CustomException(ErrorCode.INVALID_FILE_EXTENSION);
         }
+        return extension;
     }
 
     private String extractExtension(String originalFilename) {
         if (originalFilename == null || !originalFilename.contains(".")) {
             throw new CustomException(ErrorCode.INVALID_INPUT_VALUE);
         }
-        return originalFilename.substring(originalFilename.lastIndexOf('.') + 1);
+        return originalFilename.substring(originalFilename.lastIndexOf('.') + 1).toLowerCase();
     }
 
     // 원본 파일명은 버리고, S3에 저장할 새 키(경로+이름)를 새로 만듦: {dirName}/{id}/{uuid}_{yyMMdd}.{ext}
-    private String generateKey(String dirName, Long id, String originalFilename) {
-        String extension = extractExtension(originalFilename);
+    private String generateKey(String dirName, Long id, String extension) {
         String newFileName = UUID.randomUUID() + "_" + LocalDate.now().format(DATE_FORMAT) + "." + extension;
         return dirName + "/" + id + "/" + newFileName;
     }
