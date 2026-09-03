@@ -15,6 +15,9 @@ public enum ErrorCode {
     PASSWORD_MISMATCH(HttpStatus.BAD_REQUEST, "비밀번호가 일치하지 않습니다."),
     PASSWORD_SAME_AS_OLD(HttpStatus.BAD_REQUEST, "새 비밀번호는 기존 비밀번호와 달라야 합니다."),
     IMAGE_ALREADY_DEFAULT(HttpStatus.BAD_REQUEST, "이미 기본 프로필 사진입니다."),
+    EMPTY_FILE(HttpStatus.BAD_REQUEST, "파일을 첨부해주세요."),
+    FILE_SIZE_EXCEEDED(HttpStatus.BAD_REQUEST, "파일 용량은 5MB를 넘을 수 없습니다."),
+    INVALID_FILE_EXTENSION(HttpStatus.BAD_REQUEST, "지원하지 않는 파일 형식입니다. (jpg, jpeg, png 만 가능)"),
 
     ENTITY_NOT_FOUND(HttpStatus.NOT_FOUND, "요청한 리소스를 찾을 수 없습니다."),
     MEMBER_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 회원입니다."),
