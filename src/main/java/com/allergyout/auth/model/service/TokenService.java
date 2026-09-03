@@ -45,24 +45,32 @@ public class TokenService {
     @Transactional
     public String refreshToken(HttpServletRequest request, HttpServletResponse response) {
         String refreshToken = cookieUtil.getCookie(request, CookieUtil.REFRESH_COOKIE);
-        if (refreshToken == null
-                || !jwtUtil.isValidToken(refreshToken)
+
+        if (refreshToken == null || refreshToken.isBlank()) {
+            return null;
+        }
+
+        if (!jwtUtil.isValidToken(refreshToken)
                 || !"refresh".equals(jwtUtil.getTokenType(refreshToken))) {
-            rejectRefresh(response);
+            cookieUtil.deleteAuthCookies(response);
+            if (jwtUtil.isExpiredToken(refreshToken)) {
+                throw new CustomException(ErrorCode.REFRESH_EXPIRED);
+            }
+            throw new CustomException(ErrorCode.INVALID_REFRESH_TOKEN);
         }
 
         String jti = jwtUtil.getJti(refreshToken);
         if (tokenMapper.countValidToken(jti, System.currentTimeMillis()) == 0) {
-            memberMapper.findByMemberId(jwtUtil.getSubject(refreshToken))
-                    .ifPresent(m -> tokenMapper.deleteByMemberNo(m.getMemberNo()));
-            rejectRefresh(response);
+            cookieUtil.deleteAuthCookies(response);
+            throw new CustomException(ErrorCode.LOGIN_FROM_OTHER_DEVICE);
         }
 
         tokenMapper.deleteByToken(jti);
 
         Member member = memberMapper.findByMemberId(jwtUtil.getSubject(refreshToken)).orElse(null);
         if (member == null) {
-            rejectRefresh(response);
+            cookieUtil.deleteAuthCookies(response);
+            throw new CustomException(ErrorCode.UNAUTHORIZED);
         }
 
         return createAuthTokens(member, response);
