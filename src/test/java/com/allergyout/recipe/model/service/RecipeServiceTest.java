@@ -29,12 +29,20 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.allergyout.global.exception.CustomException;
+import com.allergyout.global.exception.ErrorCode;
 import com.allergyout.recipe.model.dao.RecipeMapper;
 import com.allergyout.recipe.model.dto.MaterialCreateRequest;
+import com.allergyout.recipe.model.dto.MaterialUpdateRequest;
 import com.allergyout.recipe.model.dto.RecipeCreateRequest;
+import com.allergyout.recipe.model.dto.RecipeDetailItem;
+import com.allergyout.recipe.model.dto.RecipeDetailResponse;
 import com.allergyout.recipe.model.dto.RecipeListItem;
 import com.allergyout.recipe.model.dto.RecipeListResponse;
+import com.allergyout.recipe.model.dto.RecipeUpdateRequest;
 import com.allergyout.recipe.model.dto.StepCreateRequest;
+import com.allergyout.recipe.model.dto.StepUpdateRequest;
+import com.allergyout.recipe.model.vo.Material;
+import com.allergyout.recipe.model.vo.Recipe;
 import com.allergyout.recipe.model.vo.RecipeStep;
 import com.allergyout.s3.S3Service;
 
@@ -140,9 +148,9 @@ class RecipeServiceTest {
     }
 
     // 스텝 이미지가 있으면: recipes/steps 디렉터리 + recipeNo 키로 업로드하고,
-    // 리턴된 URL 은 STEP_IMG 에, 원본 파일명은 STEP_IMG_PATH 에 담기는지.
+    // 원본 파일명은 STEP_IMG 에, 리턴된 S3 URL 은 STEP_IMG_PATH 에 담기는지.
     @Test
-    @DisplayName("스텝 이미지 있으면 recipes/steps 디렉터리로 업로드하고 STEP_IMG에 URL 저장")
+    @DisplayName("스텝 이미지 있으면 recipes/steps 디렉터리로 업로드하고 STEP_IMG=원본명·STEP_IMG_PATH=URL 저장")
     void createRecipe_withStepImg_uploadsAndSavesUrl() {
         when(s3Service.upload(any(), eq("recipes"), anyLong())).thenReturn(MAIN_URL);
         when(s3Service.upload(any(), eq("recipes/steps"), anyLong())).thenReturn(STEP_URL);
@@ -154,8 +162,8 @@ class RecipeServiceTest {
 
         ArgumentCaptor<RecipeStep> captor = ArgumentCaptor.forClass(RecipeStep.class);
         verify(recipeMapper).insertRecipeStep(captor.capture());
-        assertThat(captor.getValue().getStepImg()).isEqualTo(STEP_URL);
-        assertThat(captor.getValue().getStepImgPath()).isEqualTo("photo.jpg");
+        assertThat(captor.getValue().getStepImg()).isEqualTo("photo.jpg");   // STEP_IMG = 원본 파일명
+        assertThat(captor.getValue().getStepImgPath()).isEqualTo(STEP_URL);  // STEP_IMG_PATH = S3 URL
         verify(s3Service).upload(any(), eq("recipes/steps"), eq(100L));
     }
 
@@ -184,12 +192,12 @@ class RecipeServiceTest {
     @DisplayName("목록 조회(비회원): 비회원 매퍼 호출 + offset·pageInfo 계산")
     void getRecipeList_guest() {
         List<RecipeListItem> rows = List.of(
-                new RecipeListItem(2L, "김치찌개", "url2", "관리자", LocalDate.of(2026, 8, 21)),
-                new RecipeListItem(1L, "된장국", "url1", "관리자", LocalDate.of(2026, 8, 20)));
+                new RecipeListItem(2L, "김치찌개", "kimchi.jpg", "https://img/2.jpg", "관리자", LocalDate.of(2026, 8, 21)),
+                new RecipeListItem(1L, "된장국", "doenjang.jpg", "https://img/1.jpg", "관리자", LocalDate.of(2026, 8, 20)));
         when(recipeMapper.getRecipeList(20, 10)).thenReturn(rows); // page 2 * size 10 = offset 20
         when(recipeMapper.countRecipeList()).thenReturn(37);
 
-        RecipeListResponse res = recipeService.getRecipeList(2, 10, null);
+        RecipeListResponse res = recipeService.getRecipeList(2, 10, null, null);
 
         assertThat(res.recipes()).hasSize(2);
         assertThat(res.pageInfo().getOffset()).isEqualTo(20);
@@ -205,7 +213,7 @@ class RecipeServiceTest {
         when(recipeMapper.getRecipeListForMember(0, 20, 7L)).thenReturn(List.of());
         when(recipeMapper.countRecipeListForMember(7L)).thenReturn(0);
 
-        recipeService.getRecipeList(0, 20, 7L);
+        recipeService.getRecipeList(0, 20, 7L, null);
 
         verify(recipeMapper).getRecipeListForMember(0, 20, 7L);
         verify(recipeMapper).countRecipeListForMember(7L);
@@ -216,7 +224,7 @@ class RecipeServiceTest {
     @Test
     @DisplayName("page 음수면 CustomException, 매퍼 미호출")
     void getRecipeList_negativePage() {
-        assertThatThrownBy(() -> recipeService.getRecipeList(-1, 10, null))
+        assertThatThrownBy(() -> recipeService.getRecipeList(-1, 10, null, null))
                 .isInstanceOf(CustomException.class);
         verify(recipeMapper, never()).getRecipeList(anyInt(), anyInt());
     }
@@ -225,7 +233,398 @@ class RecipeServiceTest {
     @Test
     @DisplayName("size가 50 초과면 CustomException")
     void getRecipeList_sizeTooLarge() {
-        assertThatThrownBy(() -> recipeService.getRecipeList(0, 51, null))
+        assertThatThrownBy(() -> recipeService.getRecipeList(0, 51, null, null))
                 .isInstanceOf(CustomException.class);
+    }
+
+    // ---- 키워드 검색 ----
+
+    // 비회원 + keyword : 비회원 키워드 매퍼로 분기, keyword 그대로 전달(특수문자 없으면 이스케이프 영향 없음)
+    @Test
+    @DisplayName("검색(비회원): keyword 있으면 getRecipeListByKeyword 로 분기")
+    void getRecipeList_guestKeyword() {
+        when(recipeMapper.getRecipeListByKeyword(0, 20, "된장")).thenReturn(List.of());
+        when(recipeMapper.countRecipeListByKeyword("된장")).thenReturn(0);
+
+        recipeService.getRecipeList(0, 20, null, "된장");
+
+        verify(recipeMapper).getRecipeListByKeyword(0, 20, "된장");
+        verify(recipeMapper, never()).getRecipeList(anyInt(), anyInt());
+    }
+
+    // 회원 + keyword : 회원 키워드 매퍼(알러지 제외 + 키워드)로 분기
+    @Test
+    @DisplayName("검색(회원): keyword 있으면 getRecipeListForMemberByKeyword 로 분기")
+    void getRecipeList_memberKeyword() {
+        when(recipeMapper.getRecipeListForMemberByKeyword(0, 20, 7L, "된장")).thenReturn(List.of());
+        when(recipeMapper.countRecipeListForMemberByKeyword(7L, "된장")).thenReturn(0);
+
+        recipeService.getRecipeList(0, 20, 7L, "된장");
+
+        verify(recipeMapper).getRecipeListForMemberByKeyword(0, 20, 7L, "된장");
+        verify(recipeMapper, never()).getRecipeListForMember(anyInt(), anyInt(), anyLong());
+    }
+
+    // 공백뿐인 keyword : trim 후 빈 문자열 → null 취급 → 키워드 매퍼 안 타고 전체조회 분기
+    @Test
+    @DisplayName("검색: 공백뿐인 keyword 는 전체조회로 (키워드 매퍼 미호출)")
+    void getRecipeList_blankKeyword_fallsBackToAll() {
+        when(recipeMapper.getRecipeList(0, 20)).thenReturn(List.of());
+        when(recipeMapper.countRecipeList()).thenReturn(0);
+
+        recipeService.getRecipeList(0, 20, null, "   ");
+
+        verify(recipeMapper).getRecipeList(0, 20);
+        verify(recipeMapper, never()).getRecipeListByKeyword(anyInt(), anyInt(), anyString());
+    }
+
+    // LIKE 메타문자(%)는 이스케이프되어 매퍼에 넘어간다 ("50%" → "50\%", 쿼리는 ESCAPE '\')
+    @Test
+    @DisplayName("검색: keyword 의 %·_·\\ 는 이스케이프해서 매퍼에 전달")
+    void getRecipeList_keywordEscaped() {
+        when(recipeMapper.getRecipeListByKeyword(0, 20, "50\\% \\_ \\\\")).thenReturn(List.of());
+        when(recipeMapper.countRecipeListByKeyword("50\\% \\_ \\\\")).thenReturn(0);
+
+        recipeService.getRecipeList(0, 20, null, "  50% _ \\  ");
+
+        verify(recipeMapper).getRecipeListByKeyword(0, 20, "50\\% \\_ \\\\");
+    }
+
+    // ---- 필터 조회 (getFilteredRecipeList) — 분기 없이 memberNo·keyword·excludeMaterials 를 매퍼에 전달 ----
+
+    @Test
+    @DisplayName("필터: keyword·excludeMaterials·memberNo 를 정규화해 매퍼에 그대로 전달")
+    void getFilteredRecipeList_passesThrough() {
+        when(recipeMapper.getFilteredRecipeList(0, 20, 7L, "된장", List.of("계란", "우유"))).thenReturn(List.of());
+        when(recipeMapper.countFilteredRecipeList(7L, "된장", List.of("계란", "우유"))).thenReturn(0);
+
+        recipeService.getFilteredRecipeList(0, 20, 7L, " 된장 ", List.of(" 계란 ", "", "  ", "우유"));
+
+        verify(recipeMapper).getFilteredRecipeList(0, 20, 7L, "된장", List.of("계란", "우유"));
+        verify(recipeMapper).countFilteredRecipeList(7L, "된장", List.of("계란", "우유"));
+    }
+
+    @Test
+    @DisplayName("필터: keyword 공백뿐·excludeMaterials 빈 리스트면 둘 다 null 로 전달 (매퍼 <if> 가 조건 생략)")
+    void getFilteredRecipeList_emptyConditionsBecomeNull() {
+        when(recipeMapper.getFilteredRecipeList(0, 20, null, null, null)).thenReturn(List.of());
+        when(recipeMapper.countFilteredRecipeList(null, null, null)).thenReturn(0);
+
+        recipeService.getFilteredRecipeList(0, 20, null, "   ", List.of("  ", ""));
+
+        verify(recipeMapper).getFilteredRecipeList(0, 20, null, null, null);
+    }
+
+    @Test
+    @DisplayName("필터: excludeMaterials 각 항목의 %·_·\\ 도 이스케이프해서 전달")
+    void getFilteredRecipeList_excludeMaterialsEscaped() {
+        when(recipeMapper.getFilteredRecipeList(0, 20, null, null, List.of("계란\\%"))).thenReturn(List.of());
+        when(recipeMapper.countFilteredRecipeList(null, null, List.of("계란\\%"))).thenReturn(0);
+
+        recipeService.getFilteredRecipeList(0, 20, null, null, List.of("계란%"));
+
+        verify(recipeMapper).getFilteredRecipeList(0, 20, null, null, List.of("계란\\%"));
+    }
+
+    @Test
+    @DisplayName("필터: page 범위 밖이면 CustomException, 매퍼 미호출")
+    void getFilteredRecipeList_invalidPage() {
+        assertThatThrownBy(() -> recipeService.getFilteredRecipeList(-1, 20, null, null, null))
+                .isInstanceOf(CustomException.class);
+        verify(recipeMapper, never()).getFilteredRecipeList(anyInt(), anyInt(), any(), any(), any());
+    }
+
+    // ---- 상세 조회 ----
+
+    private RecipeDetailItem detailRow() {
+        return new RecipeDetailItem(5L, 7L, "된장국", "나트륨 줄인 된장국",             // recipeNo, memberNo(작성자)
+                "main.jpg",                                                         // RECIPE_MAIN_IMG  (원본명)
+                "https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/7/main.jpg", // RECIPES_IMG_PATH (URL)
+                "관리자", LocalDate.of(2026, 8, 21), false);
+    }
+
+    // 정상: recipe + materials + steps 를 매퍼 3개에서 받아 조립. steps 는 매퍼 정렬 순서 유지.
+    @Test
+    @DisplayName("상세 조회: 3개 쿼리 결과를 recipe/materials/steps 로 조립")
+    void getRecipe_assembles() {
+        when(recipeMapper.getRecipeDetail(5L)).thenReturn(detailRow());
+        when(recipeMapper.getMaterialsByRecipeNo(5L)).thenReturn(List.of(
+                Material.builder().materialNo(1L).recipeNo(5L).materialName("두부").amount("20g").build(),
+                Material.builder().materialNo(2L).recipeNo(5L).materialName("감자").amount("10g").build()));
+        when(recipeMapper.getStepsByRecipeNo(5L)).thenReturn(List.of(
+                RecipeStep.builder().stepNo(10L).recipeNo(5L).stepInfo("썬다").stepOrder(1)
+                        .stepImg("s1.jpg").stepImgPath("https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/steps/5/s1.jpg").build(),
+                RecipeStep.builder().stepNo(11L).recipeNo(5L).stepInfo("끓인다").stepOrder(2).build()));
+
+        RecipeDetailResponse res = recipeService.getRecipe(5L);
+
+        assertThat(res.recipe().recipeNo()).isEqualTo(5L);
+        assertThat(res.recipe().memberNo()).isEqualTo(7L);                 // 작성자 PK
+        assertThat(res.recipe().recipeMainImg()).isEqualTo("main.jpg");    // RECIPE_MAIN_IMG (원본명)
+        assertThat(res.recipe().recipesImgPath()).startsWith("https://");  // RECIPES_IMG_PATH (버킷 URL)
+        assertThat(res.recipe().isBookmarked()).isFalse();                 // 미구현 → false
+        assertThat(res.materials()).extracting(m -> m.materialName()).containsExactly("두부", "감자");
+        assertThat(res.steps()).hasSize(2);
+        assertThat(res.steps().get(0).stepImg()).isEqualTo("s1.jpg");      // STEP_IMG (원본명)
+        assertThat(res.steps().get(0).stepImgPath())
+                .isEqualTo("https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/steps/5/s1.jpg"); // STEP_IMG_PATH (URL)
+        assertThat(res.steps().get(1).stepImg()).isNull();                 // 이미지 없는 단계
+        assertThat(res.steps().get(1).stepImgPath()).isNull();
+        assertThat(res.steps().get(1).stepInfo()).isEqualTo("끓인다");
+    }
+
+    // 없는 레시피 → RECIPE_NOT_FOUND, 재료·단계 쿼리는 아예 안 나감
+    @Test
+    @DisplayName("상세 조회: 없는 레시피면 RECIPE_NOT_FOUND, 자식 쿼리 미실행")
+    void getRecipe_notFound() {
+        when(recipeMapper.getRecipeDetail(999L)).thenReturn(null);
+
+        assertThatThrownBy(() -> recipeService.getRecipe(999L))
+                .isInstanceOfSatisfying(CustomException.class,
+                        ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.RECIPE_NOT_FOUND));
+
+        verify(recipeMapper, never()).getMaterialsByRecipeNo(anyLong());
+        verify(recipeMapper, never()).getStepsByRecipeNo(anyLong());
+    }
+
+    // ---- 레시피 수정 (updateRecipe) ----
+
+    private static final long RID = 5L;
+
+    private RecipeUpdateRequest updateRequest(List<MaterialUpdateRequest> materials, List<StepUpdateRequest> steps) {
+        return new RecipeUpdateRequest("김치찌개", "묵은지로 끓인 김치찌개", materials, steps);
+    }
+
+    private MaterialUpdateRequest mat(Long no, String name, String amount) {
+        return new MaterialUpdateRequest(no, name, amount);
+    }
+
+    private StepUpdateRequest ustep(Long no, int order, String info, MultipartFile stepImg) {
+        return new StepUpdateRequest(no, order, info, stepImg, null);
+    }
+
+    // 로그인 회원(MEMBER_NO=7) 소유 + 기존 대표 이미지가 있는 레시피
+    private Recipe ownedRecipe() {
+        return Recipe.builder()
+                .recipeNo(RID).memberNo(MEMBER_NO)
+                .recipeMainImg("old-main.jpg")
+                .recipesImgPath("https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/7/old-main.jpg")
+                .delYn("N").build();
+    }
+
+    @Test
+    @DisplayName("수정: 없는 레시피면 RECIPE_NOT_FOUND, 쓰기 매퍼 미호출")
+    void updateRecipe_notFound() {
+        when(recipeMapper.getRecipeByNo(RID)).thenReturn(null);
+
+        assertThatThrownBy(() -> recipeService.updateRecipe(RID,
+                updateRequest(List.of(mat(null, "김치", "200g")), List.of(ustep(null, 1, "끓인다", null))),
+                null, MEMBER_NO))
+                .isInstanceOfSatisfying(CustomException.class,
+                        ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.RECIPE_NOT_FOUND));
+
+        verify(recipeMapper, never()).updateRecipe(any());
+    }
+
+    @Test
+    @DisplayName("수정: 작성자 본인이 아니면 FORBIDDEN")
+    void updateRecipe_notOwner() {
+        when(recipeMapper.getRecipeByNo(RID)).thenReturn(Recipe.builder()
+                .recipeNo(RID).memberNo(999L).delYn("N").build());
+
+        assertThatThrownBy(() -> recipeService.updateRecipe(RID,
+                updateRequest(List.of(mat(null, "김치", "200g")), List.of(ustep(null, 1, "끓인다", null))),
+                null, MEMBER_NO))
+                .isInstanceOfSatisfying(CustomException.class,
+                        ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.FORBIDDEN));
+
+        verify(recipeMapper, never()).updateRecipe(any());
+    }
+
+    @Test
+    @DisplayName("수정: 대표 이미지 미전송이면 기존 값 재입력, S3 업로드 없음")
+    void updateRecipe_mainImageUnchanged_keepsExistingValues() {
+        when(recipeMapper.getRecipeByNo(RID)).thenReturn(ownedRecipe());
+
+        recipeService.updateRecipe(RID,
+                updateRequest(List.of(mat(null, "김치", "200g")), List.of(ustep(null, 1, "끓인다", null))),
+                null, MEMBER_NO);
+
+        ArgumentCaptor<Recipe> cap = ArgumentCaptor.forClass(Recipe.class);
+        verify(recipeMapper).updateRecipe(cap.capture());
+        assertThat(cap.getValue().getRecipeMainImg()).isEqualTo("old-main.jpg");   // 원본명 유지
+        assertThat(cap.getValue().getRecipesImgPath())
+                .isEqualTo("https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/7/old-main.jpg"); // URL 유지
+        verify(s3Service, never()).upload(any(), anyString(), anyLong());
+    }
+
+    @Test
+    @DisplayName("수정: 재료 대조 — UPDATE/INSERT/DELETE 분기")
+    void updateRecipe_materialReconcile() {
+        when(recipeMapper.getRecipeByNo(RID)).thenReturn(ownedRecipe());
+        when(recipeMapper.getMaterialsByRecipeNo(RID)).thenReturn(List.of(
+                Material.builder().materialNo(100L).recipeNo(RID).materialName("김치").amount("200g").build(),
+                Material.builder().materialNo(101L).recipeNo(RID).materialName("두부").amount("1모").build(),
+                Material.builder().materialNo(102L).recipeNo(RID).materialName("파").amount("1대").build()));
+
+        recipeService.updateRecipe(RID,
+                updateRequest(List.of(
+                        mat(100L, "묵은지", "250g"),   // UPDATE
+                        mat(101L, "두부", "1모"),       // UPDATE
+                        mat(null, "돼지고기", "100g")), // INSERT
+                        List.of(ustep(null, 1, "끓인다", null))),
+                null, MEMBER_NO);
+
+        verify(recipeMapper, times(2)).updateMaterial(any());
+        verify(recipeMapper, times(1)).insertMaterial(any());
+        verify(recipeMapper).deleteMaterial(102L);
+    }
+
+    @Test
+    @DisplayName("수정: 다른 레시피의 materialNo면 INVALID_INPUT_VALUE")
+    void updateRecipe_foreignMaterialNo() {
+        when(recipeMapper.getRecipeByNo(RID)).thenReturn(ownedRecipe());
+        when(recipeMapper.getMaterialsByRecipeNo(RID)).thenReturn(List.of(
+                Material.builder().materialNo(100L).recipeNo(RID).materialName("김치").amount("200g").build()));
+
+        assertThatThrownBy(() -> recipeService.updateRecipe(RID,
+                updateRequest(List.of(mat(999L, "김치", "200g")), List.of(ustep(null, 1, "끓인다", null))),
+                null, MEMBER_NO))
+                .isInstanceOfSatisfying(CustomException.class,
+                        ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.INVALID_INPUT_VALUE));
+    }
+
+    @Test
+    @DisplayName("수정: 단계 이미지 교체 시 새 파일 업로드(STEP_IMG=원본명) + 옛 S3 객체 삭제")
+    void updateRecipe_stepImageReplaced() {
+        when(recipeMapper.getRecipeByNo(RID)).thenReturn(ownedRecipe());
+        when(recipeMapper.getStepsByRecipeNo(RID)).thenReturn(List.of(
+                RecipeStep.builder().stepNo(200L).recipeNo(RID).stepInfo("굽는다").stepOrder(1)
+                        .stepImg("old-step.jpg")
+                        .stepImgPath("https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/5/old-step.jpg")
+                        .build()));
+        when(s3Service.upload(any(), eq("recipes/steps"), eq(RID))).thenReturn(STEP_URL);
+
+        recipeService.updateRecipe(RID,
+                updateRequest(List.of(mat(null, "김치", "200g")),
+                        List.of(ustep(200L, 1, "굽는다", img("stepList[0].stepImg")))),
+                null, MEMBER_NO);
+
+        ArgumentCaptor<RecipeStep> cap = ArgumentCaptor.forClass(RecipeStep.class);
+        verify(recipeMapper).updateRecipeStep(cap.capture());
+        assertThat(cap.getValue().getStepImg()).isEqualTo("photo.jpg");   // 원본 파일명
+        assertThat(cap.getValue().getStepImgPath()).isEqualTo(STEP_URL);  // 새 S3 버킷 URL
+        verify(s3Service).delete("recipes/5/old-step.jpg");               // 트랜잭션 동기화 없어 afterCommit 즉시 실행
+    }
+
+    @Test
+    @DisplayName("수정: removeStepImg=true 면 기존 단계 이미지 삭제 (컬럼 null + 옛 S3 삭제)")
+    void updateRecipe_removeStepImage() {
+        when(recipeMapper.getRecipeByNo(RID)).thenReturn(ownedRecipe());
+        when(recipeMapper.getStepsByRecipeNo(RID)).thenReturn(List.of(
+                RecipeStep.builder().stepNo(200L).recipeNo(RID).stepInfo("굽는다").stepOrder(1)
+                        .stepImg("old.jpg")
+                        .stepImgPath("https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/5/old.jpg")
+                        .build()));
+
+        recipeService.updateRecipe(RID,
+                updateRequest(List.of(mat(null, "김치", "200g")),
+                        List.of(new StepUpdateRequest(200L, 1, "굽는다", null, true))),  // 이미지 삭제
+                null, MEMBER_NO);
+
+        ArgumentCaptor<RecipeStep> cap = ArgumentCaptor.forClass(RecipeStep.class);
+        verify(recipeMapper).updateRecipeStep(cap.capture());
+        assertThat(cap.getValue().getStepImg()).isNull();
+        assertThat(cap.getValue().getStepImgPath()).isNull();
+        verify(s3Service).delete("recipes/5/old.jpg");            // 옛 S3 객체 정리
+        verify(s3Service, never()).upload(any(), anyString(), anyLong());
+    }
+
+    @Test
+    @DisplayName("수정: 빠진 단계는 행·이미지 삭제, 남는 단계 있으면 bumpStepOrders")
+    void updateRecipe_removedStep_deletesRowAndImage() {
+        when(recipeMapper.getRecipeByNo(RID)).thenReturn(ownedRecipe());
+        when(recipeMapper.getStepsByRecipeNo(RID)).thenReturn(List.of(
+                RecipeStep.builder().stepNo(200L).recipeNo(RID).stepInfo("A").stepOrder(1)
+                        .stepImg("a.jpg").stepImgPath("https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/5/a.jpg").build(),
+                RecipeStep.builder().stepNo(201L).recipeNo(RID).stepInfo("B").stepOrder(2)
+                        .stepImg("b.jpg").stepImgPath("https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/5/b.jpg").build()));
+
+        recipeService.updateRecipe(RID,
+                updateRequest(List.of(mat(null, "김치", "200g")),
+                        List.of(ustep(200L, 1, "A", null))),   // 201 빠짐
+                null, MEMBER_NO);
+
+        verify(recipeMapper).deleteRecipeStep(201L);
+        verify(recipeMapper).bumpStepOrders(RID);
+        verify(recipeMapper).updateRecipeStep(any());
+        verify(s3Service).delete("recipes/5/b.jpg");
+        verify(s3Service, never()).delete("recipes/5/a.jpg");
+    }
+
+    @Test
+    @DisplayName("수정: 살아남는 기존 단계가 없으면 bumpStepOrders 생략")
+    void updateRecipe_allNewSteps_noBump() {
+        when(recipeMapper.getRecipeByNo(RID)).thenReturn(ownedRecipe());
+
+        recipeService.updateRecipe(RID,
+                updateRequest(List.of(mat(null, "김치", "200g")),
+                        List.of(ustep(null, 1, "A", null), ustep(null, 2, "B", null))),
+                null, MEMBER_NO);
+
+        verify(recipeMapper, never()).bumpStepOrders(anyLong());
+        verify(recipeMapper, times(2)).insertRecipeStep(any());
+    }
+
+    @Test
+    @DisplayName("수정: STEP_ORDER 중복이면 INVALID_INPUT_VALUE, 조회 미실행")
+    void updateRecipe_duplicateStepOrder() {
+        assertThatThrownBy(() -> recipeService.updateRecipe(RID,
+                updateRequest(List.of(mat(null, "김치", "200g")),
+                        List.of(ustep(null, 1, "A", null), ustep(null, 1, "B", null))),
+                null, MEMBER_NO))
+                .isInstanceOf(CustomException.class);
+
+        verify(recipeMapper, never()).getRecipeByNo(anyLong());
+    }
+
+    // ---- 레시피 삭제 (deleteRecipe) — 소프트 삭제 ----
+
+    @Test
+    @DisplayName("삭제: 작성자 본인이면 DEL_YN='Y' UPDATE, 자식·S3 는 안 건드림")
+    void deleteRecipe_softDeletes() {
+        when(recipeMapper.getRecipeByNo(RID)).thenReturn(ownedRecipe());
+
+        recipeService.deleteRecipe(RID, MEMBER_NO);
+
+        verify(recipeMapper).updateRecipeDelYn(RID, MEMBER_NO);
+        verify(recipeMapper, never()).deleteMaterial(anyLong());
+        verify(recipeMapper, never()).deleteRecipeStep(anyLong());
+        verify(s3Service, never()).delete(anyString());
+    }
+
+    @Test
+    @DisplayName("삭제: 없는 레시피면 RECIPE_NOT_FOUND, UPDATE 미실행")
+    void deleteRecipe_notFound() {
+        when(recipeMapper.getRecipeByNo(RID)).thenReturn(null);
+
+        assertThatThrownBy(() -> recipeService.deleteRecipe(RID, MEMBER_NO))
+                .isInstanceOfSatisfying(CustomException.class,
+                        ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.RECIPE_NOT_FOUND));
+
+        verify(recipeMapper, never()).updateRecipeDelYn(anyLong(), anyLong());
+    }
+
+    @Test
+    @DisplayName("삭제: 작성자 본인이 아니면 FORBIDDEN, UPDATE 미실행")
+    void deleteRecipe_notOwner() {
+        when(recipeMapper.getRecipeByNo(RID)).thenReturn(Recipe.builder()
+                .recipeNo(RID).memberNo(999L).delYn("N").build());
+
+        assertThatThrownBy(() -> recipeService.deleteRecipe(RID, MEMBER_NO))
+                .isInstanceOfSatisfying(CustomException.class,
+                        ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.FORBIDDEN));
+
+        verify(recipeMapper, never()).updateRecipeDelYn(anyLong(), anyLong());
     }
 }

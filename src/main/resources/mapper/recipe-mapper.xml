@@ -65,12 +65,14 @@
 			    )
     </insert>
 
-    <!-- ========== 비회원 목록 : 삭제만 제외, 최신순, OFFSET 페이징 ========== -->
+    <!-- ========== 비회원 목록 : 삭제만 제외, 최신순, OFFSET 페이징 ==========
+         RECIPE_MAIN_IMG = 원본 파일명 / RECIPES_IMG_PATH = S3 버킷 URL. 프론트 썸네일은 PATH 를 씀. -->
     <select id="getRecipeList" resultType="RecipeListItem">
         SELECT
                r.RECIPE_NO
             ,  r.RECIPE_TITLE
             ,  r.RECIPE_MAIN_IMG
+            ,  r.RECIPES_IMG_PATH
             ,  m.MEMBER_NAME
             ,  r.CREATE_DATE
           FROM
@@ -105,13 +107,14 @@
                r.RECIPE_NO
             ,  r.RECIPE_TITLE
             ,  r.RECIPE_MAIN_IMG
+            ,  r.RECIPES_IMG_PATH
             ,  m.MEMBER_NAME
             ,  r.CREATE_DATE
           FROM
                RECIPES r
           JOIN
                MEMBER  m
-            ON 
+            ON
                r.MEMBER_NO = m.MEMBER_NO
          WHERE
                r.DEL_YN = 'N'
@@ -139,7 +142,7 @@
                RECIPES r
          WHERE
                r.DEL_YN = 'N'
-           AND r.RECIPE_NO NOT IN 
+           AND r.RECIPE_NO NOT IN
            		(
                    SELECT
                           mat.RECIPE_NO
@@ -147,11 +150,383 @@
                           MATERIAL mat
                      JOIN
                           MEMBER_ALLERGY  ma
-                       ON 
+                       ON
                           mat.MATERIAL_NAME LIKE '%' || ma.MATERIAL_NAME || '%'
                     WHERE
                           ma.MEMBER_NO = #{memberNo}
                )
     </select>
+
+    <!-- ========== 키워드 검색 (비회원) : 위 비회원 목록 + 제목에 keyword 포함 ==========
+         검색 대상 = RECIPE_TITLE 만 (명세서는 "제목 또는 재료명"이지만 팀 결정으로 제목만).
+         재료명 검색이 필요해지면 아래에 OR EXISTS(MATERIAL ... LIKE) 만 추가하면 됨.
+         keyword 는 Service 에서 LIKE 메타문자(\ % _)를 이스케이프해 넘긴다 → ESCAPE '\' 로 문자 그대로 매칭. -->
+    <select id="getRecipeListByKeyword" resultType="RecipeListItem">
+        SELECT
+               r.RECIPE_NO
+            ,  r.RECIPE_TITLE
+            ,  r.RECIPE_MAIN_IMG
+            ,  r.RECIPES_IMG_PATH
+            ,  m.MEMBER_NAME
+            ,  r.CREATE_DATE
+          FROM
+               RECIPES r
+          JOIN
+               MEMBER  m
+            ON r.MEMBER_NO = m.MEMBER_NO
+         WHERE
+               r.DEL_YN = 'N'
+           AND r.RECIPE_TITLE LIKE '%' || #{keyword} || '%' ESCAPE '\'
+         ORDER BY
+               r.CREATE_DATE DESC
+            ,  r.RECIPE_NO   DESC
+        OFFSET #{offset} ROWS FETCH NEXT #{size} ROWS ONLY
+    </select>
+
+    <select id="countRecipeListByKeyword" resultType="int">
+        SELECT
+               COUNT(*)
+          FROM
+               RECIPES r
+         WHERE
+               r.DEL_YN = 'N'
+           AND r.RECIPE_TITLE LIKE '%' || #{keyword} || '%' ESCAPE '\'
+    </select>
+
+    <!-- ========== 키워드 검색 (회원) : 알러지 재료 제외 + 제목에 keyword 포함 ========== -->
+    <select id="getRecipeListForMemberByKeyword" resultType="RecipeListItem">
+        SELECT
+               r.RECIPE_NO
+            ,  r.RECIPE_TITLE
+            ,  r.RECIPE_MAIN_IMG
+            ,  r.RECIPES_IMG_PATH
+            ,  m.MEMBER_NAME
+            ,  r.CREATE_DATE
+          FROM
+               RECIPES r
+          JOIN
+               MEMBER  m
+            ON
+               r.MEMBER_NO = m.MEMBER_NO
+         WHERE
+               r.DEL_YN = 'N'
+           AND r.RECIPE_NO NOT IN (
+                   SELECT
+                          mat.RECIPE_NO
+                     FROM
+                          MATERIAL        mat
+                     JOIN
+                          MEMBER_ALLERGY  ma
+                       ON mat.MATERIAL_NAME LIKE '%' || ma.MATERIAL_NAME || '%'
+                    WHERE
+                          ma.MEMBER_NO = #{memberNo}
+               )
+           AND r.RECIPE_TITLE LIKE '%' || #{keyword} || '%' ESCAPE '\'
+         ORDER BY
+               r.CREATE_DATE DESC
+            ,  r.RECIPE_NO   DESC
+        OFFSET #{offset} ROWS FETCH NEXT #{size} ROWS ONLY
+    </select>
+
+    <select id="countRecipeListForMemberByKeyword" resultType="int">
+        SELECT
+               COUNT(*)
+          FROM
+               RECIPES r
+         WHERE
+               r.DEL_YN = 'N'
+           AND r.RECIPE_NO NOT IN (
+                   SELECT
+                          mat.RECIPE_NO
+                     FROM
+                          MATERIAL        mat
+                     JOIN
+                          MEMBER_ALLERGY  ma
+                       ON mat.MATERIAL_NAME LIKE '%' || ma.MATERIAL_NAME || '%'
+                    WHERE
+                          ma.MEMBER_NO = #{memberNo}
+               )
+           AND r.RECIPE_TITLE LIKE '%' || #{keyword} || '%' ESCAPE '\'
+    </select>
+
+    <!-- ========================================================================
+         필터 조회 (GET /api/recipes/filter) : 프론트 목록 통합 엔드포인트
+         조건 3개를 <if> 로 조립한다 (셋 다 선택 — null/빈값이면 그 AND 절이 통째로 빠짐).
+           1) keyword          : 제목(RECIPE_TITLE) 부분일치
+           2) memberNo != null : 그 회원 알러지 재료가 든 레시피 제외 (기존 회원 목록과 동일 서브쿼리)
+           3) excludeMaterials : 사용자가 고른 제외 재료가 하나라도 든 레시피 제외
+         keyword·excludeMaterials 는 Service 에서 LIKE 메타문자(\ % _)를 이스케이프해 넘긴다 → ESCAPE '\'.
+
+         <foreach> 동작 : excludeMaterials(List<String>) 를 순회하며 각 항목을
+           mat.MATERIAL_NAME LIKE '%' || #{ex} || '%' ESCAPE '\'
+         로 펼치고, open="(" separator=" OR " close=")" 로 감싼다.
+         예) excludeMaterials = ["계란", "우유"] →
+           ( mat.MATERIAL_NAME LIKE '%'||'계란'||'%' ESCAPE '\'
+             OR mat.MATERIAL_NAME LIKE '%'||'우유'||'%' ESCAPE '\' )
+         → 그 재료가 든 RECIPE_NO 집합을 만들어 r.RECIPE_NO NOT IN 으로 뺀다.
+         ======================================================================== -->
+    <select id="getFilteredRecipeList" resultType="RecipeListItem">
+        SELECT
+               r.RECIPE_NO
+            ,  r.RECIPE_TITLE
+            ,  r.RECIPE_MAIN_IMG
+            ,  r.RECIPES_IMG_PATH
+            ,  m.MEMBER_NAME
+            ,  r.CREATE_DATE
+          FROM
+               RECIPES r
+          JOIN
+               MEMBER  m
+            ON r.MEMBER_NO = m.MEMBER_NO
+         <where>
+               r.DEL_YN = 'N'
+
+           <!-- 1) 제목 검색 -->
+           <if test="keyword != null">
+           AND r.RECIPE_TITLE LIKE '%' || #{keyword} || '%' ESCAPE '\'
+           </if>
+
+           <!-- 2) 회원 알러지 재료 제외 -->
+           <if test="memberNo != null">
+           AND r.RECIPE_NO NOT IN (
+                   SELECT
+                          mat.RECIPE_NO
+                     FROM
+                          MATERIAL        mat
+                     JOIN
+                          MEMBER_ALLERGY  ma
+                       ON mat.MATERIAL_NAME LIKE '%' || ma.MATERIAL_NAME || '%'
+                    WHERE
+                          ma.MEMBER_NO = #{memberNo}
+               )
+           </if>
+
+           <!-- 3) 사용자 지정 제외 재료 -->
+           <if test="excludeMaterials != null and excludeMaterials.size() > 0">
+           AND r.RECIPE_NO NOT IN (
+                   SELECT
+                          mat.RECIPE_NO
+                     FROM
+                          MATERIAL mat
+                    WHERE
+                          <foreach collection="excludeMaterials" item="ex" open="(" separator=" OR " close=")">
+                          mat.MATERIAL_NAME LIKE '%' || #{ex} || '%' ESCAPE '\'
+                          </foreach>
+               )
+           </if>
+         </where>
+         ORDER BY
+               r.CREATE_DATE DESC
+            ,  r.RECIPE_NO   DESC
+        OFFSET #{offset} ROWS FETCH NEXT #{size} ROWS ONLY
+    </select>
+
+    <select id="countFilteredRecipeList" resultType="int">
+        SELECT
+               COUNT(*)
+          FROM
+               RECIPES r
+         <where>
+               r.DEL_YN = 'N'
+
+           <if test="keyword != null">
+           AND r.RECIPE_TITLE LIKE '%' || #{keyword} || '%' ESCAPE '\'
+           </if>
+
+           <if test="memberNo != null">
+           AND r.RECIPE_NO NOT IN (
+                   SELECT
+                          mat.RECIPE_NO
+                     FROM
+                          MATERIAL        mat
+                     JOIN
+                          MEMBER_ALLERGY  ma
+                       ON mat.MATERIAL_NAME LIKE '%' || ma.MATERIAL_NAME || '%'
+                    WHERE
+                          ma.MEMBER_NO = #{memberNo}
+               )
+           </if>
+
+           <if test="excludeMaterials != null and excludeMaterials.size() > 0">
+           AND r.RECIPE_NO NOT IN (
+                   SELECT
+                          mat.RECIPE_NO
+                     FROM
+                          MATERIAL mat
+                    WHERE
+                          <foreach collection="excludeMaterials" item="ex" open="(" separator=" OR " close=")">
+                          mat.MATERIAL_NAME LIKE '%' || #{ex} || '%' ESCAPE '\'
+                          </foreach>
+               )
+           </if>
+         </where>
+    </select>
+
+    <!-- ========================================================================
+         상세 조회 (GET /api/recipes/{recipeNo}) : 다중 쿼리 + Service 조립
+         ======================================================================== -->
+
+    <!-- recipe 객체. RECIPE_MAIN_IMG(원본명) + RECIPES_IMG_PATH(S3 버킷 URL) 둘 다 내려준다 (별칭 안 씀).
+         isBookmarked 는 현재 0(false) 고정 — 즐겨찾기 기능 구현 시 Service 에서 실제 판정으로 교체
+         (그때 아래 '0 AS IS_BOOKMARKED' 도 제거). -->
+    <select id="getRecipeDetail" resultType="com.allergyout.recipe.model.dto.RecipeDetailItem">
+        SELECT
+               r.RECIPE_NO
+            ,  r.MEMBER_NO
+            ,  r.RECIPE_TITLE
+            ,  r.RECIPE_INFO
+            ,  r.RECIPE_MAIN_IMG
+            ,  r.RECIPES_IMG_PATH
+            ,  m.MEMBER_NAME
+            ,  r.CREATE_DATE
+            ,  0 AS IS_BOOKMARKED
+          FROM
+               RECIPES r
+          JOIN
+               MEMBER  m
+            ON r.MEMBER_NO = m.MEMBER_NO
+         WHERE
+               r.RECIPE_NO = #{recipeNo}
+           AND r.DEL_YN    = 'N'
+    </select>
+
+    <!-- 재료 목록 -->
+    <select id="getMaterialsByRecipeNo" resultType="com.allergyout.recipe.model.vo.Material">
+        SELECT
+               MATERIAL_NO
+            ,  RECIPE_NO
+            ,  MATERIAL_NAME
+            ,  AMOUNT
+          FROM
+               MATERIAL
+         WHERE
+               RECIPE_NO = #{recipeNo}
+         ORDER BY
+               MATERIAL_NO
+    </select>
+
+    <!-- 조리 단계 목록 (STEP_ORDER 오름차순). STEP_IMG_PATH = S3 버킷 URL. 상세 조회 + 수정 대조에 공용 -->
+    <select id="getStepsByRecipeNo" resultType="com.allergyout.recipe.model.vo.RecipeStep">
+        SELECT
+               STEP_NO
+            ,  RECIPE_NO
+            ,  STEP_INFO
+            ,  STEP_IMG
+            ,  STEP_ORDER
+            ,  STEP_IMG_PATH
+          FROM
+               RECIPE_STEPS
+         WHERE
+               RECIPE_NO = #{recipeNo}
+         ORDER BY
+               STEP_ORDER
+    </select>
+
+    <!-- ========================================================================
+         레시피 수정 (PATCH /api/recipes/{recipeNo}) : "최종 상태 기반" 갱신
+         재료·단계 목록 로드는 위 getMaterialsByRecipeNo / getStepsByRecipeNo 재사용
+         ======================================================================== -->
+
+    <!-- 수정 대상 조회 : 소유자(MEMBER_NO) 확인 + 기존 이미지 값(대표 이미지 미변경 시 재입력용) 확보 -->
+    <select id="getRecipeByNo" resultType="com.allergyout.recipe.model.vo.Recipe">
+        SELECT
+               RECIPE_NO
+            ,  MEMBER_NO
+            ,  RECIPE_TITLE
+            ,  RECIPE_INFO
+            ,  RECIPE_MAIN_IMG
+            ,  RECIPES_IMG_PATH
+            ,  CREATE_DATE
+            ,  DEL_YN
+          FROM
+               RECIPES
+         WHERE
+               RECIPE_NO = #{recipeNo}
+           AND DEL_YN    = 'N'
+    </select>
+
+    <!-- RECIPES 본문 UPDATE. 이미지 컬럼 2개도 항상 채운다 (대표 이미지 미변경이면 Service 가 기존 값을 재입력).
+         동적 SQL 없이 고정 쿼리 1개. RECIPE_MAIN_IMG = 원본 파일명 / RECIPES_IMG_PATH = S3 버킷 URL.
+         WHERE 에 MEMBER_NO 도 걸어 소유자 이중 확인 (Service 사전 검사 + member-mapper 관례). -->
+    <update id="updateRecipe">
+        UPDATE
+               RECIPES
+           SET
+               RECIPE_TITLE     = #{recipeTitle}
+            ,  RECIPE_INFO      = #{recipeInfo}
+            ,  RECIPE_MAIN_IMG  = #{recipeMainImg}
+            ,  RECIPES_IMG_PATH = #{recipesImgPath}
+         WHERE
+               RECIPE_NO = #{recipeNo}
+           AND MEMBER_NO = #{memberNo}
+           AND DEL_YN    = 'N'
+    </update>
+
+    <update id="updateMaterial">
+        UPDATE
+               MATERIAL
+           SET
+               MATERIAL_NAME = #{materialName}
+            ,  AMOUNT        = #{amount}
+         WHERE
+               MATERIAL_NO = #{materialNo}
+    </update>
+
+    <delete id="deleteMaterial">
+        DELETE
+          FROM
+               MATERIAL
+         WHERE
+               MATERIAL_NO = #{materialNo}
+    </delete>
+
+    <!-- STEP_IMG = 원본 파일명 / STEP_IMG_PATH = S3 버킷 URL. 이미지 미변경이면 Service 가 기존 값을 재입력.
+         null 가능성 있어 jdbcType=VARCHAR 명시. -->
+    <update id="updateRecipeStep">
+        UPDATE
+               RECIPE_STEPS
+           SET
+               STEP_INFO     = #{stepInfo}
+            ,  STEP_IMG      = #{stepImg, jdbcType=VARCHAR}
+            ,  STEP_ORDER    = #{stepOrder}
+            ,  STEP_IMG_PATH = #{stepImgPath, jdbcType=VARCHAR}
+         WHERE
+               STEP_NO = #{stepNo}
+    </update>
+
+    <delete id="deleteRecipeStep">
+        DELETE
+          FROM
+               RECIPE_STEPS
+         WHERE
+               STEP_NO = #{stepNo}
+    </delete>
+
+    <!-- UNIQUE(RECIPE_NO, STEP_ORDER) 충돌 회피 : 삭제 후 남은 기존 단계들의 STEP_ORDER 를
+         잠깐 +1000 밀어두고, 이어서 요청 최종값(1..N)으로 다시 UPDATE 한다. +1000 은 트랜잭션 내 임시값. -->
+    <update id="bumpStepOrders">
+        UPDATE
+               RECIPE_STEPS
+           SET
+               STEP_ORDER = STEP_ORDER + 1000
+         WHERE
+               RECIPE_NO = #{recipeNo}
+    </update>
+
+    <!-- ========================================================================
+         레시피 삭제 (DELETE /api/recipes/{recipeNo}) : 소프트 삭제
+         자식(MATERIAL·RECIPE_STEPS) 행과 S3 객체는 그대로 둔다 (살아있는 레시피로만 접근되므로)
+         WHERE 에 MEMBER_NO 도 걸어 소유자 이중 확인 (Service 사전 검사 + member-mapper 관례)
+         ======================================================================== -->
+    <update id="updateRecipeDelYn">
+        UPDATE
+               RECIPES
+           SET
+               DEL_YN = 'Y'
+         WHERE
+               RECIPE_NO = #{recipeNo}
+           AND MEMBER_NO = #{memberNo}
+           AND DEL_YN    = 'N'
+    </update>
 
 </mapper>

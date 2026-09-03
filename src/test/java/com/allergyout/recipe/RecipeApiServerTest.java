@@ -2,6 +2,7 @@ package com.allergyout.recipe;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -40,8 +41,10 @@ import com.allergyout.global.security.JwtUtil;
 import com.allergyout.member.model.dao.MemberMapper;
 import com.allergyout.member.model.vo.Member;
 import com.allergyout.recipe.model.dao.RecipeMapper;
+import com.allergyout.recipe.model.dto.RecipeDetailItem;
 import com.allergyout.recipe.model.dto.RecipeListItem;
 import com.allergyout.recipe.model.vo.Material;
+import com.allergyout.recipe.model.vo.Recipe;
 import com.allergyout.recipe.model.vo.RecipeStep;
 import com.allergyout.s3.S3Service;
 
@@ -139,7 +142,7 @@ class RecipeApiServerTest {
         assertThat(recipeCap.getValue())
                 .containsEntry("memberNo", 42L)                 // ← 인증 principal에서 온 값
                 .containsEntry("recipeTitle", "된장국")
-                .containsEntry("recipesImgPath", "main.jpg");
+                .containsEntry("recipeMainImg", "main.jpg");     // RECIPE_MAIN_IMG = 원본 파일명
 
         ArgumentCaptor<Material> matCap = ArgumentCaptor.forClass(Material.class);
         Mockito.verify(recipeMapper, Mockito.times(2)).insertMaterial(matCap.capture());
@@ -148,8 +151,8 @@ class RecipeApiServerTest {
 
         ArgumentCaptor<RecipeStep> stepCap = ArgumentCaptor.forClass(RecipeStep.class);
         Mockito.verify(recipeMapper, Mockito.times(2)).insertRecipeStep(stepCap.capture());
-        assertThat(stepCap.getAllValues().get(0).getStepImgPath()).isEqualTo("s0.jpg");
-        assertThat(stepCap.getAllValues().get(0).getStepImg()).isNotNull();
+        assertThat(stepCap.getAllValues().get(0).getStepImg()).isEqualTo("s0.jpg");     // STEP_IMG = 원본 파일명
+        assertThat(stepCap.getAllValues().get(0).getStepImgPath()).isNotNull();         // STEP_IMG_PATH = S3 URL
         assertThat(stepCap.getAllValues().get(1).getStepImg()).isNull();
         assertThat(stepCap.getAllValues().get(1).getStepImgPath()).isNull();
     }
@@ -204,7 +207,9 @@ class RecipeApiServerTest {
     @DisplayName("실서버 GET /api/recipes → 200, recipes + pageInfo, createDate 포맷")
     void getRecipeList_realServer() {
         when(recipeMapper.getRecipeList(0, 20)).thenReturn(List.of(
-                new RecipeListItem(101L, "된장국", "https://img/101.jpg", "관리자", LocalDate.of(2026, 8, 21))));
+                new RecipeListItem(101L, "된장국", "doenjang.jpg",
+                        "https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/1/101.jpg",
+                        "관리자", LocalDate.of(2026, 8, 21))));
         when(recipeMapper.countRecipeList()).thenReturn(37);
 
         String body = client.get().uri("/api/recipes")
@@ -215,10 +220,216 @@ class RecipeApiServerTest {
                 .contains("\"code\":200")
                 .contains("레시피 목록 조회 성공했습니다.")
                 .contains("\"recipeNo\":101")
+                .contains("\"recipeMainImg\":\"doenjang.jpg\"")   // 원본 파일명
+                .contains("\"recipesImgPath\":\"https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/1/101.jpg\"")
                 .contains("\"memberName\":\"관리자\"")
                 .contains("\"createDate\":\"2026-08-21\"")
                 .contains("\"totalElements\":37")
                 .contains("\"totalPages\":2")
                 .contains("\"offset\":0");
+    }
+
+    // 키워드 검색 end-to-end: GET /api/recipes?keyword=된장 → 비회원 키워드 매퍼로 라우팅
+    @Test
+    @DisplayName("실서버 GET /api/recipes?keyword=된장 → 200, getRecipeListByKeyword 로 라우팅")
+    void getRecipeList_keyword_realServer() {
+        when(recipeMapper.getRecipeListByKeyword(0, 20, "된장")).thenReturn(List.of(
+                new RecipeListItem(101L, "된장국", "doenjang.jpg",
+                        "https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/1/101.jpg",
+                        "관리자", LocalDate.of(2026, 8, 21))));
+        when(recipeMapper.countRecipeListByKeyword("된장")).thenReturn(1);
+
+        String body = client.get().uri("/api/recipes?keyword=된장")
+                .retrieve()
+                .body(String.class);
+
+        assertThat(body)
+                .contains("\"code\":200")
+                .contains("\"recipeNo\":101")
+                .contains("\"totalElements\":1");
+        Mockito.verify(recipeMapper, Mockito.never()).getRecipeList(anyInt(), anyInt());
+    }
+
+    // 필터 end-to-end: GET /api/recipes/filter?keyword=&excludeMaterials= → 통합 필터 매퍼로 라우팅.
+    // 인증 없이 호출 → memberNo null 로 매퍼에 전달. excludeMaterials 는 반복 파라미터.
+    @Test
+    @DisplayName("실서버 GET /api/recipes/filter?keyword=된장&excludeMaterials=계란&excludeMaterials=우유 → 200")
+    void getFilteredRecipeList_realServer() {
+        when(recipeMapper.getFilteredRecipeList(0, 20, null, "된장", List.of("계란", "우유")))
+                .thenReturn(List.of(new RecipeListItem(101L, "된장국", "doenjang.jpg",
+                        "https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/1/101.jpg",
+                        "관리자", LocalDate.of(2026, 8, 21))));
+        when(recipeMapper.countFilteredRecipeList(null, "된장", List.of("계란", "우유"))).thenReturn(1);
+
+        String body = client.get().uri("/api/recipes/filter?keyword=된장&excludeMaterials=계란&excludeMaterials=우유")
+                .retrieve()
+                .body(String.class);
+
+        assertThat(body)
+                .contains("\"code\":200")
+                .contains("레시피 목록 조회 성공했습니다.")
+                .contains("\"recipeNo\":101")
+                .contains("\"totalElements\":1");
+    }
+
+    // 필터 라우팅: /filter 가 /{recipeNo}(상세) 로 안 새는지 — "filter" 를 recipeNo 로 안 파싱해야 함
+    @Test
+    @DisplayName("실서버 GET /api/recipes/filter (조건 없음) → 200, 상세 조회로 안 샘")
+    void getFilteredRecipeList_noParams_routesToFilter() {
+        when(recipeMapper.getFilteredRecipeList(0, 20, null, null, null)).thenReturn(List.of());
+        when(recipeMapper.countFilteredRecipeList(null, null, null)).thenReturn(0);
+
+        var res = client.get().uri("/api/recipes/filter").retrieve().toEntity(String.class);
+
+        assertThat(res.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(res.getBody()).contains("\"recipes\":[]").contains("\"totalElements\":0");
+        Mockito.verify(recipeMapper, Mockito.never()).getRecipeDetail(anyLong());
+    }
+
+    // 상세 조회 end-to-end: GET /api/recipes/{id} → 200, data.recipe/materials/steps.
+    // 이미지는 원본명(*Img) + 버킷 URL(*ImgPath) 둘 다. isBookmarked 필드명 그대로. 인증 없이도 됨.
+    @Test
+    @DisplayName("실서버 GET /api/recipes/{id} → 200, recipe+materials+steps, 이미지 원본명·URL 둘 다")
+    void getRecipe_realServer() {
+        when(recipeMapper.getRecipeDetail(5L)).thenReturn(new RecipeDetailItem(
+                5L, 7L, "된장국", "나트륨 줄인 된장국",                                  // recipeNo, memberNo(작성자)
+                "main.jpg",                                                          // RECIPE_MAIN_IMG  (원본명)
+                "https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/7/main.jpg",  // RECIPES_IMG_PATH (URL)
+                "관리자", LocalDate.of(2026, 8, 21), false));
+        when(recipeMapper.getMaterialsByRecipeNo(5L)).thenReturn(List.of(
+                Material.builder().materialNo(1L).recipeNo(5L).materialName("두부").amount("20g").build()));
+        when(recipeMapper.getStepsByRecipeNo(5L)).thenReturn(List.of(
+                RecipeStep.builder().stepNo(10L).recipeNo(5L).stepInfo("썬다").stepOrder(1)
+                        .stepImg("s1.jpg")
+                        .stepImgPath("https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/steps/5/s1.jpg").build()));
+
+        String body = client.get().uri("/api/recipes/5").retrieve().body(String.class);
+
+        assertThat(body)
+                .contains("\"code\":200")
+                .contains("레시피 상세 조회 성공했습니다.")
+                .contains("\"recipeNo\":5")
+                .contains("\"memberNo\":7")   // 작성자 PK
+                .contains("\"recipeMainImg\":\"main.jpg\"")
+                .contains("\"recipesImgPath\":\"https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/7/main.jpg\"")
+                .contains("\"isBookmarked\":false")
+                .contains("\"materialName\":\"두부\"")
+                .contains("\"stepOrder\":1")
+                .contains("\"stepImg\":\"s1.jpg\"")
+                .contains("\"stepImgPath\":\"https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/steps/5/s1.jpg\"");
+    }
+
+    // 없는 레시피 → 404 + 명세서 문구
+    @Test
+    @DisplayName("실서버 GET /api/recipes/{id}: 없는 레시피 → 404")
+    void getRecipe_notFound() {
+        when(recipeMapper.getRecipeDetail(999L)).thenReturn(null);
+
+        RestClientResponseException e = org.junit.jupiter.api.Assertions.assertThrows(
+                RestClientResponseException.class,
+                () -> client.get().uri("/api/recipes/999").retrieve().body(String.class));
+        assertThat(e.getStatusCode().value()).isEqualTo(404);
+        assertThat(e.getResponseBodyAsString()).contains("존재하지 않는 레시피입니다.");
+    }
+
+    // recipeNo 가 숫자가 아니면 → GlobalExceptionHandler 의 타입불일치 핸들러가 400
+    @Test
+    @DisplayName("실서버 GET /api/recipes/abc: 숫자 아님 → 400")
+    void getRecipe_badPathVariable() {
+        RestClientResponseException e = org.junit.jupiter.api.Assertions.assertThrows(
+                RestClientResponseException.class,
+                () -> client.get().uri("/api/recipes/abc").retrieve().body(String.class));
+        assertThat(e.getStatusCode().value()).isEqualTo(400);
+        assertThat(e.getResponseBodyAsString()).contains("입력값이 올바르지 않습니다.");
+    }
+
+    private MultipartBodyBuilder updateBody() {
+        MultipartBodyBuilder b = new MultipartBodyBuilder();
+        b.part("recipeTitle", "김치찌개");
+        b.part("recipeInfo", "묵은지로 끓인 김치찌개");
+        b.part("materialList[0].materialName", "묵은지");   // materialNo 없음 → 신규
+        b.part("materialList[0].amount", "250g");
+        b.part("stepList[0].stepOrder", "1");
+        b.part("stepList[0].stepInfo", "재료를 볶고 물을 붓는다");
+        return b;
+    }
+
+    // 수정 end-to-end: 실제 톰캣 + JwtFilter 인증 통과 → 작성자 본인(memberNo=42)이면 200, RECIPES UPDATE 도달.
+    @Test
+    @DisplayName("실서버 PATCH /api/recipes/{id} → 작성자 본인이면 200, RECIPES UPDATE 호출")
+    void updateRecipe_realServer() {
+        when(recipeMapper.getRecipeByNo(5L)).thenReturn(Recipe.builder()
+                .recipeNo(5L).memberNo(42L)
+                .recipeMainImg("old.jpg")
+                .recipesImgPath("https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/42/old.jpg")
+                .delYn("N").build());
+
+        var res = client.patch().uri("/api/recipes/5")
+                .header(HttpHeaders.AUTHORIZATION, bearer)
+                .contentType(MediaType.MULTIPART_FORM_DATA)
+                .body(updateBody().build())
+                .retrieve()
+                .toEntity(String.class);
+
+        assertThat(res.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(res.getBody()).contains("\"code\":200").contains("레시피 수정 성공했습니다.");
+        Mockito.verify(recipeMapper).updateRecipe(any());
+    }
+
+    // 인가: 남의 레시피(memberNo=999)를 수정하려 하면 403, RECIPES UPDATE 미도달.
+    @Test
+    @DisplayName("실서버 PATCH: 작성자 본인이 아니면 403, RECIPES UPDATE 미호출")
+    void updateRecipe_notOwner_forbidden() {
+        when(recipeMapper.getRecipeByNo(5L)).thenReturn(Recipe.builder()
+                .recipeNo(5L).memberNo(999L).delYn("N").build());
+
+        try {
+            client.patch().uri("/api/recipes/5")
+                    .header(HttpHeaders.AUTHORIZATION, bearer)
+                    .contentType(MediaType.MULTIPART_FORM_DATA)
+                    .body(updateBody().build())
+                    .retrieve().toBodilessEntity();
+        } catch (RestClientResponseException e) {
+            assertThat(e.getStatusCode().value()).isEqualTo(403);
+            assertThat(e.getResponseBodyAsString()).contains("권한이 없습니다.");
+        }
+
+        Mockito.verify(recipeMapper, Mockito.never()).updateRecipe(any());
+    }
+
+    // 삭제 end-to-end: 작성자 본인(memberNo=42) → 200, DEL_YN='Y' UPDATE 호출 (소프트 삭제)
+    @Test
+    @DisplayName("실서버 DELETE /api/recipes/{id} → 작성자 본인이면 200, updateRecipeDelYn 호출")
+    void deleteRecipe_realServer() {
+        when(recipeMapper.getRecipeByNo(5L)).thenReturn(Recipe.builder()
+                .recipeNo(5L).memberNo(42L).delYn("N").build());
+
+        var res = client.method(org.springframework.http.HttpMethod.DELETE).uri("/api/recipes/5")
+                .header(HttpHeaders.AUTHORIZATION, bearer)
+                .retrieve()
+                .toEntity(String.class);
+
+        assertThat(res.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(res.getBody()).contains("\"code\":200").contains("레시피 삭제 성공했습니다.");
+        Mockito.verify(recipeMapper).updateRecipeDelYn(5L, 42L);
+    }
+
+    // 인가: 남의 레시피(memberNo=999) 삭제 시 403, UPDATE 미도달
+    @Test
+    @DisplayName("실서버 DELETE: 작성자 본인이 아니면 403, updateRecipeDelYn 미호출")
+    void deleteRecipe_notOwner_forbidden() {
+        when(recipeMapper.getRecipeByNo(5L)).thenReturn(Recipe.builder()
+                .recipeNo(5L).memberNo(999L).delYn("N").build());
+
+        try {
+            client.delete().uri("/api/recipes/5")
+                    .header(HttpHeaders.AUTHORIZATION, bearer)
+                    .retrieve().toBodilessEntity();
+        } catch (RestClientResponseException e) {
+            assertThat(e.getStatusCode().value()).isEqualTo(403);
+            assertThat(e.getResponseBodyAsString()).contains("권한이 없습니다.");
+        }
+
+        Mockito.verify(recipeMapper, Mockito.never()).updateRecipeDelYn(anyLong(), anyLong());
     }
 }
