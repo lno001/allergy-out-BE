@@ -2,4 +2,18 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.allergyout.bookmark.model.dao.BookmarkMapper">
 
+    <!-- 해당 회원이 그 레시피를 이미 즐겨찾기했는지 (복합 PK 존재 여부) -->
+    <select id="isDuplicateBookmark" resultType="boolean">
+        SELECT CASE WHEN COUNT(*) > 0 THEN 1 ELSE 0 END
+          FROM BOOKMARK
+         WHERE MEMBER_NO = #{memberNo}
+           AND RECIPE_NO = #{recipeNo}
+    </select>
+
+    <!-- CREATE_DATE 는 DB default(SYSDATE) → INSERT 컬럼에 안 넣음 -->
+    <insert id="insertBookmark">
+        INSERT INTO BOOKMARK (MEMBER_NO, RECIPE_NO)
+        VALUES (#{memberNo}, #{recipeNo})
+    </insert>
+
 </mapper>

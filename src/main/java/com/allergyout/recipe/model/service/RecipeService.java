@@ -467,6 +467,16 @@ public class RecipeService {
             throw new CustomException(ErrorCode.INVALID_INPUT_VALUE);
         }
     }
+    
+    // bookmark 도메인에서 레시피 존재·활성(DEL_YN='N') 검증용. 기존 getRecipeByNo 재사용 — 기존 코드 미수정, 추가만.
+    // 추후 recipe 담당이 이 부분 참고해 재정리 예정.
+    // recipeNo == null 가드: getRecipeByNo(long) 언박싱 NPE(→500) 대신 404로 처리.
+    @Transactional(readOnly = true)
+    public void validateRecipeExists(Long recipeNo) {
+        if (recipeNo == null || recipeMapper.getRecipeByNo(recipeNo) == null) {
+            throw new CustomException(ErrorCode.RECIPE_NOT_FOUND);
+        }
+    }
 
     /** 올린 S3 파일을 best-effort로 삭제. 삭제 실패는 로그만 남기고 삼킨다(원래 예외를 덮지 않기 위해). */
     private void deleteQuietly(List<String> keys) {

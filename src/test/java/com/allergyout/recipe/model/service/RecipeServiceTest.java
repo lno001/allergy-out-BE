@@ -627,4 +627,34 @@ class RecipeServiceTest {
 
         verify(recipeMapper, never()).updateRecipeDelYn(anyLong(), anyLong());
     }
+
+    @Test
+    @DisplayName("존재검증: 활성 레시피면 통과")
+    void validateRecipeExists_ok() {
+        when(recipeMapper.getRecipeByNo(RID)).thenReturn(ownedRecipe());
+
+        recipeService.validateRecipeExists(RID);
+
+        verify(recipeMapper).getRecipeByNo(RID);
+    }
+
+    @Test
+    @DisplayName("존재검증: 없거나 삭제된 레시피면 RECIPE_NOT_FOUND")
+    void validateRecipeExists_notFound() {
+        when(recipeMapper.getRecipeByNo(RID)).thenReturn(null);
+
+        assertThatThrownBy(() -> recipeService.validateRecipeExists(RID))
+                .isInstanceOfSatisfying(CustomException.class,
+                        ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.RECIPE_NOT_FOUND));
+    }
+
+    @Test
+    @DisplayName("존재검증: recipeNo 가 null 이면 매퍼 호출 없이 RECIPE_NOT_FOUND")
+    void validateRecipeExists_null() {
+        assertThatThrownBy(() -> recipeService.validateRecipeExists(null))
+                .isInstanceOfSatisfying(CustomException.class,
+                        ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.RECIPE_NOT_FOUND));
+
+        verify(recipeMapper, never()).getRecipeByNo(anyLong());
+    }
 }
