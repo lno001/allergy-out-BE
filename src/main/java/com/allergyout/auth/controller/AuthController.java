@@ -48,6 +48,9 @@ public class AuthController {
             HttpServletRequest request,
             HttpServletResponse response) {
         String accessToken = authService.refreshToken(request, response);
+        if (accessToken == null) {
+            return ResponseEntity.ok(ApiResponse.success("비로그인", null));
+        }
         return ResponseEntity.ok(
                 ApiResponse.success("토큰 재발급", new AccessTokenResponse(accessToken)));
     }
