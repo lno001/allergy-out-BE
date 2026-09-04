@@ -24,7 +24,7 @@ public class PageInfo {
 		}
 		
 		this.size = size;
-		if(0 < this.size ) {
+		if(0 > this.size ) {
 			throw new CustomException(ErrorCode.INVALID_INPUT_VALUE);
 		}
 		this.offset = page * size;
