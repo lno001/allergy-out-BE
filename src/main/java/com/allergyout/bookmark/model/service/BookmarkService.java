@@ -28,7 +28,7 @@ public class BookmarkService {
         // 레시피 존재·활성(DEL_YN='N') 검증 → 없으면 RECIPE_NOT_FOUND. 통과하면 중복 검사(409).
         recipeService.validateRecipeExists(recipeNo);
         if (bookmarkMapper.isDuplicateBookmark(memberNo, recipeNo)) {
-            throw new CustomException(ErrorCode.DUPLICATE_VALUE, Map.of("recipeNo", "이미 즐겨찾기한 레시피입니다."));
+            throw new CustomException(ErrorCode.ALREADY_BOOKMARKED);
         }
         bookmarkMapper.insertBookmark(memberNo, recipeNo);
     }
@@ -53,10 +53,24 @@ public class BookmarkService {
         return new BookmarkListResponse(recipes, pageInfo);
     }
 
-    // 형식(기본값·타입)은 Controller @RequestParam, 여기선 값 범위만 (page ≥ 0, 1 ≤ size ≤ 50). recipe 와 동일 로직.
+    // 내 즐겨찾기 1건 삭제. memberNo 는 토큰에서 오므로 WHERE 로 스코프 → 소유자 별도 검증 없음.
+    // 삭제된 행이 0이면 대상 없음 → 404.
+    @Transactional
+    public void deleteBookmark(Long memberNo, Long recipeNo) {
+        int deleted = bookmarkMapper.deleteBookmark(memberNo, recipeNo);
+        if (deleted == 0) {
+            throw new CustomException(ErrorCode.BOOKMARK_NOT_FOUND);
+        }
+    }
+
+    // 형식(기본값·타입)은 Controller @RequestParam, 여기선 값 범위만 (page ≥ 0, 1 ≤ size ≤ 50).
+    // 어느 파라미터가 왜 틀렸는지 data 로 내려준다 (초과 페이지 응답과 형태 통일).
     private void validatePageParams(int page, int size) {
-        if (page < 0 || size < 1 || size > 50) {
-            throw new CustomException(ErrorCode.INVALID_INPUT_VALUE);
+        if (page < 0) {
+            throw new CustomException(ErrorCode.INVALID_INPUT_VALUE, Map.of("page", "0 이상이어야 합니다."));
+        }
+        if (size < 1 || size > 50) {
+            throw new CustomException(ErrorCode.INVALID_INPUT_VALUE, Map.of("size", "1 이상 50 이하여야 합니다."));
         }
     }
 }

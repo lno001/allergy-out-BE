@@ -22,4 +22,7 @@ public interface BookmarkMapper {
                                           @Param("memberNo") Long memberNo);
 
     int countBookmarkList(@Param("memberNo") Long memberNo);
+
+    // 내 즐겨찾기 1건 삭제 (복합 PK). 삭제된 행 수 반환 → 0 이면 대상 없음.
+    int deleteBookmark(@Param("memberNo") Long memberNo, @Param("recipeNo") Long recipeNo);
 }

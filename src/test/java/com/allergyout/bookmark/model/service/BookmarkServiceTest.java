@@ -55,17 +55,13 @@ class BookmarkServiceTest {
     }
 
     @Test
-    @DisplayName("이미 즐겨찾기한 레시피면 DUPLICATE_VALUE + data{recipeNo}, insert 미호출")
+    @DisplayName("이미 즐겨찾기한 레시피면 ALREADY_BOOKMARKED, insert 미호출")
     void createBookmark_duplicated() {
         when(bookmarkMapper.isDuplicateBookmark(MEMBER_NO, RECIPE_NO)).thenReturn(true);
 
         assertThatThrownBy(() -> bookmarkService.createBookmark(MEMBER_NO, RECIPE_NO))
-                .isInstanceOf(CustomException.class)
-                .satisfies(ex -> {
-                    CustomException ce = (CustomException) ex;
-                    assertThat(ce.getErrorCode()).isEqualTo(ErrorCode.DUPLICATE_VALUE);
-                    assertThat(ce.getDetails()).containsExactly(entry("recipeNo", "이미 즐겨찾기한 레시피입니다."));
-                });
+                .isInstanceOfSatisfying(CustomException.class,
+                        ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.ALREADY_BOOKMARKED));
         verify(bookmarkMapper, never()).insertBookmark(any(), any());
     }
 
@@ -135,13 +131,52 @@ class BookmarkServiceTest {
     }
 
     @Test
-    @DisplayName("목록: size 가 범위 밖(51)이면 INVALID_INPUT_VALUE, count/목록 쿼리 미호출")
-    void getBookmarkList_invalidSize() {
-        assertThatThrownBy(() -> bookmarkService.getBookmarkList(MEMBER_NO, 0, 51))
-                .isInstanceOfSatisfying(CustomException.class,
-                        ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.INVALID_INPUT_VALUE));
+    @DisplayName("목록: page 가 음수면 INVALID_INPUT_VALUE + data{page}, count/목록 쿼리 미호출")
+    void getBookmarkList_negativePage() {
+        assertThatThrownBy(() -> bookmarkService.getBookmarkList(MEMBER_NO, -1, 20))
+                .isInstanceOf(CustomException.class)
+                .satisfies(ex -> {
+                    CustomException ce = (CustomException) ex;
+                    assertThat(ce.getErrorCode()).isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+                    assertThat(ce.getDetails()).containsExactly(entry("page", "0 이상이어야 합니다."));
+                });
 
         verify(bookmarkMapper, never()).countBookmarkList(any());
         verify(bookmarkMapper, never()).getBookmarkList(anyInt(), anyInt(), anyLong());
+    }
+
+    @Test
+    @DisplayName("목록: size 가 범위 밖(51)이면 INVALID_INPUT_VALUE + data{size}, count/목록 쿼리 미호출")
+    void getBookmarkList_invalidSize() {
+        assertThatThrownBy(() -> bookmarkService.getBookmarkList(MEMBER_NO, 0, 51))
+                .isInstanceOf(CustomException.class)
+                .satisfies(ex -> {
+                    CustomException ce = (CustomException) ex;
+                    assertThat(ce.getErrorCode()).isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+                    assertThat(ce.getDetails()).containsExactly(entry("size", "1 이상 50 이하여야 합니다."));
+                });
+
+        verify(bookmarkMapper, never()).countBookmarkList(any());
+        verify(bookmarkMapper, never()).getBookmarkList(anyInt(), anyInt(), anyLong());
+    }
+
+    @Test
+    @DisplayName("삭제: 삭제된 행이 1이면 정상 완료")
+    void deleteBookmark_success() {
+        when(bookmarkMapper.deleteBookmark(MEMBER_NO, RECIPE_NO)).thenReturn(1);
+
+        bookmarkService.deleteBookmark(MEMBER_NO, RECIPE_NO);
+
+        verify(bookmarkMapper).deleteBookmark(MEMBER_NO, RECIPE_NO);
+    }
+
+    @Test
+    @DisplayName("삭제: 삭제 대상이 없으면(0행) BOOKMARK_NOT_FOUND")
+    void deleteBookmark_notFound() {
+        when(bookmarkMapper.deleteBookmark(MEMBER_NO, RECIPE_NO)).thenReturn(0);
+
+        assertThatThrownBy(() -> bookmarkService.deleteBookmark(MEMBER_NO, RECIPE_NO))
+                .isInstanceOfSatisfying(CustomException.class,
+                        ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.BOOKMARK_NOT_FOUND));
     }
 }

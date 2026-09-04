@@ -43,4 +43,12 @@
            AND r.DEL_YN = 'N'
     </select>
 
+    <!-- 내 즐겨찾기 1건 삭제 (복합 PK). MEMBER_NO 를 WHERE 에 걸어 남의 북마크는 스코프 밖.
+         삭제된 레시피의 북마크도 정리 가능해야 하므로 RECIPES 조인/DEL_YN 검사 안 함. -->
+    <delete id="deleteBookmark">
+        DELETE FROM BOOKMARK
+         WHERE MEMBER_NO = #{memberNo}
+           AND RECIPE_NO = #{recipeNo}
+    </delete>
+
 </mapper>
