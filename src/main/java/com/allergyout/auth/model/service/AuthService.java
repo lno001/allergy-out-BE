@@ -62,10 +62,10 @@ public class AuthService {
     @Transactional
     public MemberLoginResponse login(LoginRequest request, HttpServletResponse response) {
         Member member = memberMapper.findByMemberId(request.memberId())
-                .orElseThrow(() -> new CustomException(ErrorCode.UNAUTHORIZED));
+                .orElseThrow(() -> new CustomException(ErrorCode.LOGIN_FAILED));
 
         if (!passwordEncoder.matches(request.memberPwd(), member.getMemberPwd())) {
-            throw new CustomException(ErrorCode.UNAUTHORIZED);
+            throw new CustomException(ErrorCode.LOGIN_FAILED);
         }
 
         String accessToken = tokenService.createAuthTokens(member, response);
