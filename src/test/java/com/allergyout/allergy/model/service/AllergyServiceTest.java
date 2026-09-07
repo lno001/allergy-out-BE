@@ -190,6 +190,35 @@ class AllergyServiceTest {
         }
 
         @Test
+        @DisplayName("이모지 등 허용 안 된 문자가 있으면 INVALID_INPUT_VALUE + 인덱스 필드 메시지")
+        void disallowedCharacter() {
+            when(memberMapper.getMember(MEMBER_NO)).thenReturn(member());
+
+            assertThatThrownBy(() -> allergyService.updateAllergyList(MEMBER_NO, List.of("땅콩", "우유🥛")))
+                    .isInstanceOf(CustomException.class)
+                    .satisfies(ex -> {
+                        CustomException ce = (CustomException) ex;
+                        assertThat(ce.getErrorCode()).isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+                        assertThat(ce.getDetails())
+                                .containsExactly(entry("allergyList[1]", "재료명은 한글, 영문, 숫자, 공백, · - ( ) 만 사용할 수 있습니다."));
+                    });
+            verify(allergyMapper, never()).deleteAllergyList(any());
+            verify(allergyMapper, never()).insertAllergy(any(), any());
+        }
+
+        @Test
+        @DisplayName("허용된 구두점(· - ( ))이 섞인 재료명은 통과한다")
+        void allowedPunctuation() {
+            when(memberMapper.getMember(MEMBER_NO)).thenReturn(member());
+            List<String> allowed = List.of("밀·곡류", "베타-카로틴", "글루텐(밀)");
+
+            AllergyResponse result = allergyService.updateAllergyList(MEMBER_NO, allowed);
+
+            assertThat(result.allergyList()).isEqualTo(allowed);
+            verify(allergyMapper).deleteAllergyList(MEMBER_NO);
+        }
+
+        @Test
         @DisplayName("같은 항목이 중복되면 INVALID_INPUT_VALUE + 인덱스 필드 메시지")
         void duplicated() {
             when(memberMapper.getMember(MEMBER_NO)).thenReturn(member());
