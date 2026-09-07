@@ -10,6 +10,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.allergyout.auth.model.dao.TokenMapper;
+import com.allergyout.global.crypto.AesUtil;
+import com.allergyout.global.crypto.HmacUtil;
 import com.allergyout.global.exception.CustomException;
 import com.allergyout.global.exception.ErrorCode;
 import com.allergyout.global.security.CookieUtil;
@@ -36,10 +38,19 @@ public class MemberService {
     private final S3Service s3Service;
     private final TokenMapper tokenMapper;   // 탈퇴 시 리프레시 토큰 폐기 (auth 담당 DAO 재사용)
     private final CookieUtil cookieUtil;     // 탈퇴 시 인증 쿠키 삭제 (auth 담당 유틸 재사용)
+    private final AesUtil aesUtil;
+    private final HmacUtil hmacUtil;
 
     @Transactional(readOnly = true)
     public MemberResponse getMember(Long memberNo) {
-        return MemberResponse.from(getMemberByNo(memberNo));
+        Member member = getMemberByNo(memberNo);
+        return new MemberResponse(
+                member.getMemberId(),
+                member.getMemberImgPath(),
+                member.getMemberName(),
+                aesUtil.decrypt(member.getPhone()),
+                aesUtil.decrypt(member.getEmail()),
+                member.getCreateDate());
     }
 
     @Transactional
@@ -54,35 +65,36 @@ public class MemberService {
 
     @Transactional
     public MemberEmailResponse updateMemberEmail(Long memberNo, String email) {
-        String normalizedEmail = email.toLowerCase(Locale.ROOT); // 이메일은 소문자로 정규화해 저장·비교
-        Member member = getMemberByNo(memberNo);
-        if (normalizedEmail.equalsIgnoreCase(member.getEmail())) {
-            throw new CustomException(ErrorCode.INVALID_INPUT_VALUE, Map.of("email", "기존 이메일과 동일합니다."));
-        }
-        // TODO(인증번호 플로우 - 이번 스코프 제외): 이메일 변경 전 인증번호 발송·검증 필요.
-        //  별도 API(인증번호 발송/확인)와 저장소(코드·만료시각) 설계 후,
-        //  이 지점에서 "memberNo가 이 email에 대해 인증 완료 상태인지" 확인하고 아니면 CustomException 던질 것.
-        if (memberMapper.existsByEmailExcludingSelf(normalizedEmail, memberNo)) {
-            throw new CustomException(ErrorCode.DUPLICATE_VALUE, Map.of("email", "이미 사용 중인 이메일입니다."));
-        }
-        memberMapper.updateMemberEmail(memberNo, normalizedEmail);
-        return new MemberEmailResponse(normalizedEmail);
+    	String normalizedEmail = email.toLowerCase(Locale.ROOT);
+    	Member member = getMemberByNo(memberNo);
+    	String currentEmail = aesUtil.decrypt(member.getEmail());
+    	if (normalizedEmail.equalsIgnoreCase(currentEmail)) {
+    	    throw new CustomException(ErrorCode.INVALID_INPUT_VALUE, Map.of("email", "기존 이메일과 동일합니다."));
+    	}
+    	String emailHash = hmacUtil.hash(normalizedEmail);
+    	if (memberMapper.existsByEmailExcludingSelf(emailHash, memberNo)) {
+    	    throw new CustomException(ErrorCode.DUPLICATE_VALUE, Map.of("email", "이미 사용 중인 이메일입니다."));
+    	}
+    	memberMapper.updateMemberEmail(memberNo, aesUtil.encrypt(normalizedEmail), emailHash);
+    	return new MemberEmailResponse(normalizedEmail);
     }
 
     @Transactional
     public MemberPhoneResponse updateMemberPhone(Long memberNo, String phone) {
-        Member member = getMemberByNo(memberNo);
-        if (phone.equals(member.getPhone())) {
-            throw new CustomException(ErrorCode.INVALID_INPUT_VALUE, Map.of("phone", "기존 연락처와 동일합니다."));
-        }
+    	Member member = getMemberByNo(memberNo);
+    	String currentPhone = aesUtil.decrypt(member.getPhone());
+    	if (phone.equals(currentPhone)) {
+    	    throw new CustomException(ErrorCode.INVALID_INPUT_VALUE, Map.of("phone", "기존 연락처와 동일합니다."));
+    	}
+    	String phoneHash = hmacUtil.hash(phone);
         // TODO(인증번호 플로우 - 이번 스코프 제외): 연락처 변경 전 인증번호 발송·검증 필요.
         //  별도 API(인증번호 발송/확인)와 저장소(코드·만료시각) 설계 후,
         //  이 지점에서 "memberNo가 이 phone에 대해 인증 완료 상태인지" 확인하고 아니면 CustomException 던질 것.
-        if (memberMapper.existsByPhoneExcludingSelf(phone, memberNo)) {
-            throw new CustomException(ErrorCode.DUPLICATE_VALUE, Map.of("phone", "이미 사용 중인 연락처입니다."));
-        }
-        memberMapper.updateMemberPhone(memberNo, phone);
-        return new MemberPhoneResponse(phone);
+    	if (memberMapper.existsByPhoneExcludingSelf(phoneHash, memberNo)) {
+    	    throw new CustomException(ErrorCode.DUPLICATE_VALUE, Map.of("phone", "이미 사용 중인 연락처입니다."));
+    	}
+    	memberMapper.updateMemberPhone(memberNo, aesUtil.encrypt(phone), phoneHash);
+    	return new MemberPhoneResponse(phone);
     }
 
     @Transactional
