@@ -123,10 +123,10 @@ class AllergyServiceTest {
         }
 
         @Test
-        @DisplayName("100개를 초과하면 INVALID_INPUT_VALUE + allergyList 키 메시지, 삭제/삽입 미호출")
+        @DisplayName("200개를 초과하면 INVALID_INPUT_VALUE + allergyList 키 메시지, 삭제/삽입 미호출")
         void tooMany() {
             when(memberMapper.getMember(MEMBER_NO)).thenReturn(member());
-            List<String> tooMany = java.util.stream.IntStream.range(0, 101)
+            List<String> tooMany = java.util.stream.IntStream.range(0, 201)
                     .mapToObj(i -> "재료" + i)
                     .toList();
 
@@ -136,23 +136,23 @@ class AllergyServiceTest {
                         CustomException ce = (CustomException) ex;
                         assertThat(ce.getErrorCode()).isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
                         assertThat(ce.getDetails())
-                                .containsExactly(entry("allergyList", "알러지 항목은 최대 100개까지 등록할 수 있습니다."));
+                                .containsExactly(entry("allergyList", "알러지 항목은 최대 200개까지 등록할 수 있습니다."));
                     });
             verify(allergyMapper, never()).deleteAllergyList(any());
             verify(allergyMapper, never()).insertAllergy(any(), any());
         }
 
         @Test
-        @DisplayName("정확히 100개면 통과한다 (경계값)")
+        @DisplayName("정확히 200개면 통과한다 (경계값)")
         void exactlyMax() {
             when(memberMapper.getMember(MEMBER_NO)).thenReturn(member());
-            List<String> exactlyMax = java.util.stream.IntStream.range(0, 100)
+            List<String> exactlyMax = java.util.stream.IntStream.range(0, 200)
                     .mapToObj(i -> "재료" + i)
                     .toList();
 
             AllergyResponse result = allergyService.updateAllergyList(MEMBER_NO, exactlyMax);
 
-            assertThat(result.allergyList()).hasSize(100);
+            assertThat(result.allergyList()).hasSize(200);
             verify(allergyMapper).deleteAllergyList(MEMBER_NO);
         }
 
