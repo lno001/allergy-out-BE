@@ -34,34 +34,36 @@
     <!-- EMAIL/PHONE UNIQUE 제약 제거됨 → 중복 여부는 활성 회원(DEL_YN='N')끼리만 앱에서 판정.
          탈퇴 행(DEL_YN='Y')은 이메일/전화 재사용 허용 -->
     <select id="existsByEmailExcludingSelf" resultType="boolean">
-        SELECT CASE WHEN COUNT(*) > 0 THEN 1 ELSE 0 END
-          FROM MEMBER
-         WHERE EMAIL = #{email}
-           AND DEL_YN = 'N'
-           AND MEMBER_NO != #{memberNo}
-    </select>
+	    SELECT COUNT(*)
+	      FROM MEMBER
+	     WHERE EMAIL_HASH = #{emailHash}
+	       AND DEL_YN = 'N'
+	       AND MEMBER_NO != #{memberNo}
+	</select>
 
     <update id="updateMemberEmail">
-        UPDATE MEMBER
-           SET EMAIL = #{email}
-         WHERE MEMBER_NO = #{memberNo}
-           AND DEL_YN = 'N'
-    </update>
+	    UPDATE MEMBER
+	       SET EMAIL = #{email},
+	           EMAIL_HASH = #{emailHash}
+	     WHERE MEMBER_NO = #{memberNo}
+	       AND DEL_YN = 'N'
+	</update>
 
-    <select id="existsByPhoneExcludingSelf" resultType="boolean">
-        SELECT CASE WHEN COUNT(*) > 0 THEN 1 ELSE 0 END
-          FROM MEMBER
-         WHERE PHONE = #{phone}
-           AND DEL_YN = 'N'
-           AND MEMBER_NO != #{memberNo}
-    </select>
+	<select id="existsByPhoneExcludingSelf" resultType="boolean">
+	    SELECT COUNT(*)
+	      FROM MEMBER
+	     WHERE PHONE_HASH = #{phoneHash}
+	       AND DEL_YN = 'N'
+	       AND MEMBER_NO != #{memberNo}
+	</select>
 
-    <update id="updateMemberPhone">
-        UPDATE MEMBER
-           SET PHONE = #{phone}
-         WHERE MEMBER_NO = #{memberNo}
-           AND DEL_YN = 'N'
-    </update>
+	<update id="updateMemberPhone">
+	    UPDATE MEMBER
+	       SET PHONE = #{phone},
+	           PHONE_HASH = #{phoneHash}
+	     WHERE MEMBER_NO = #{memberNo}
+	       AND DEL_YN = 'N'
+	</update>
 
     <update id="updateMemberPwd">
         UPDATE MEMBER
@@ -97,13 +99,17 @@
 	        MEMBER_PWD,
 	        MEMBER_NAME,
 	        PHONE,
-	        EMAIL
+	        EMAIL,
+	        PHONE_HASH,
+	        EMAIL_HASH
 	    ) VALUES (
-	        #{memberId},
-	        #{memberPwd},
-	        #{memberName},
-	        #{phone},
-	        #{email}
+	        #{m.memberId},
+	        #{m.memberPwd},
+	        #{m.memberName},
+	        #{m.phone},
+	        #{m.email},
+	        #{phoneHash},
+	        #{emailHash}
 	    )
 	</insert>
 
@@ -130,17 +136,17 @@
 	     WHERE MEMBER_ID = #{memberId}
 	</select>
 	
-	<select id="isDuplicateEmail" resultType="boolean">	
+	<select id="isDuplicateEmail" resultType="boolean">
 	    SELECT COUNT(*)
 	      FROM MEMBER
-	     WHERE EMAIL = #{email}
+	     WHERE EMAIL_HASH = #{emailHash}
 	       AND DEL_YN = 'N'
 	</select>
 	
 	<select id="isDuplicatePhone" resultType="boolean">
 	    SELECT COUNT(*)
 	      FROM MEMBER
-	     WHERE PHONE = #{phone}
+	     WHERE PHONE_HASH = #{phoneHash}
 	       AND DEL_YN = 'N'
 	</select>
 

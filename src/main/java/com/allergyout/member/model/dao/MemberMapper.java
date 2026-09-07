@@ -17,11 +17,15 @@ public interface MemberMapper {
 
     void updateMemberName(@Param("memberNo") Long memberNo, @Param("memberName") String memberName);
 
-    boolean existsByEmailExcludingSelf(@Param("email") String email, @Param("memberNo") Long memberNo);
-    void updateMemberEmail(@Param("memberNo") Long memberNo, @Param("email") String email);
+    boolean existsByEmailExcludingSelf(@Param("emailHash") String emailHash, @Param("memberNo") Long memberNo);
+    void updateMemberEmail(@Param("memberNo") Long memberNo,
+            @Param("email") String email,
+            @Param("emailHash") String emailHash);
 
-    boolean existsByPhoneExcludingSelf(@Param("phone") String phone, @Param("memberNo") Long memberNo);
-    void updateMemberPhone(@Param("memberNo") Long memberNo, @Param("phone") String phone);
+    boolean existsByPhoneExcludingSelf(@Param("phoneHash") String phoneHash, @Param("memberNo") Long memberNo);
+    void updateMemberPhone(@Param("memberNo") Long memberNo,
+            @Param("phone") String phone,
+            @Param("phoneHash") String phoneHash);
 
     void updateMemberPwd(@Param("memberNo") Long memberNo, @Param("memberPwd") String memberPwd);
 
@@ -33,13 +37,15 @@ public interface MemberMapper {
     void updateMemberDelYn(Long memberNo); // 회원 탈퇴 - 소프트 삭제(DEL_YN='Y')
 
     // --- auth (로그인/회원가입) ---
-    void insertMember(Member member);
+    void insertMember(@Param("m") Member m,
+            @Param("emailHash") String emailHash,
+            @Param("phoneHash") String phoneHash);
 
     Optional<Member> findByMemberId(String memberId);
 
     boolean isDuplicateMemberId(String memberId);
 
-    boolean isDuplicateEmail(String email);
+    boolean isDuplicateEmail(@Param("emailHash") String emailHash);
 
-    boolean isDuplicatePhone(String phone);
+    boolean isDuplicatePhone(@Param("phoneHash") String phoneHash);
 }
