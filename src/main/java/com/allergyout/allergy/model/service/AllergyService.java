@@ -23,7 +23,7 @@ import lombok.RequiredArgsConstructor;
 public class AllergyService {
 
     private static final int MATERIAL_NAME_MAX_LENGTH = 30; // MEMBER_ALLERGY.MATERIAL_NAME NV(30)
-    private static final int ALLERGY_LIST_MAX_SIZE = 100; // 회원 1명당 등록 가능한 알러지 항목 최대 개수
+    private static final int ALLERGY_LIST_MAX_SIZE = 200; // 회원 1명당 등록 가능한 알러지 항목 최대 개수
 
     private final AllergyMapper allergyMapper;
     private final MemberMapper memberMapper; // 회원 존재 확인용 - member 담당 조회 메소드 재사용
