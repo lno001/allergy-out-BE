@@ -24,6 +24,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.allergyout.auth.model.dao.TokenMapper;
+import com.allergyout.global.crypto.AesUtil;
+import com.allergyout.global.crypto.HmacUtil;
 import com.allergyout.global.exception.CustomException;
 import com.allergyout.global.exception.ErrorCode;
 import com.allergyout.global.security.CookieUtil;
@@ -49,6 +51,10 @@ class MemberServiceTest {
     private TokenMapper tokenMapper;
     @Mock
     private CookieUtil cookieUtil;
+    @Mock
+    private AesUtil aesUtil;
+    @Mock
+    private HmacUtil hmacUtil;
 
     @InjectMocks
     private MemberService memberService;
@@ -57,6 +63,11 @@ class MemberServiceTest {
     private static final String ENCODED_PWD = "encoded-current-pwd";
     private static final String IMG_URL =
             "https://bucket.s3.ap-northeast-2.amazonaws.com/members/1/old_260830.jpg";
+    // EMAIL/PHONE 은 PR #61 이후 암호문으로 저장됨. VO 에는 암호문을 담고, 복호화 스텁이 평문을 돌려준다.
+    private static final String PLAIN_EMAIL = "allergyout@gmail.com";
+    private static final String PLAIN_PHONE = "01012341234";
+    private static final String STORED_EMAIL = "enc::" + PLAIN_EMAIL;
+    private static final String STORED_PHONE = "enc::" + PLAIN_PHONE;
 
     private Member memberWithoutImg() {
         return baseBuilder().memberImg(null).memberImgPath(null).build();
@@ -72,8 +83,8 @@ class MemberServiceTest {
                 .memberId("minjai")
                 .memberPwd(ENCODED_PWD)
                 .memberName("김민재")
-                .phone("01012341234")
-                .email("allergyout@gmail.com")
+                .phone(STORED_PHONE)
+                .email(STORED_EMAIL)
                 .role("ROLE_USER")
                 .createDate(LocalDateTime.of(2025, 8, 20, 14, 30, 0))
                 .delYn("N");
@@ -88,14 +99,16 @@ class MemberServiceTest {
         void success() {
             Member member = memberWithImg();
             when(memberMapper.getMember(MEMBER_NO)).thenReturn(member);
+            when(aesUtil.decrypt(STORED_PHONE)).thenReturn(PLAIN_PHONE);
+            when(aesUtil.decrypt(STORED_EMAIL)).thenReturn(PLAIN_EMAIL);
 
             MemberResponse result = memberService.getMember(MEMBER_NO);
 
             assertThat(result.memberId()).isEqualTo("minjai");
             assertThat(result.memberImgPath()).isEqualTo(IMG_URL);
             assertThat(result.memberName()).isEqualTo("김민재");
-            assertThat(result.phone()).isEqualTo("01012341234");
-            assertThat(result.email()).isEqualTo("allergyout@gmail.com");
+            assertThat(result.phone()).isEqualTo(PLAIN_PHONE);
+            assertThat(result.email()).isEqualTo(PLAIN_EMAIL);
             assertThat(result.createDate()).isEqualTo(LocalDateTime.of(2025, 8, 20, 14, 30, 0));
         }
 
@@ -159,34 +172,42 @@ class MemberServiceTest {
     class UpdateMemberEmail {
 
         @Test
-        @DisplayName("중복 아니면 수정 후 이메일을 반환한다")
+        @DisplayName("중복 아니면 암호화·해시해서 수정 후 이메일을 반환한다")
         void success() {
             when(memberMapper.getMember(MEMBER_NO)).thenReturn(memberWithoutImg());
-            when(memberMapper.existsByEmailExcludingSelf("new@test.com", MEMBER_NO)).thenReturn(false);
+            when(aesUtil.decrypt(STORED_EMAIL)).thenReturn(PLAIN_EMAIL);
+            when(hmacUtil.hash("new@test.com")).thenReturn("hash-new");
+            when(memberMapper.existsByEmailExcludingSelf("hash-new", MEMBER_NO)).thenReturn(false);
+            when(aesUtil.encrypt("new@test.com")).thenReturn("enc-new");
 
             MemberEmailResponse result = memberService.updateMemberEmail(MEMBER_NO, "new@test.com");
 
             assertThat(result.email()).isEqualTo("new@test.com");
-            verify(memberMapper).updateMemberEmail(MEMBER_NO, "new@test.com");
+            verify(memberMapper).updateMemberEmail(MEMBER_NO, "enc-new", "hash-new");
         }
 
         @Test
-        @DisplayName("대문자 이메일은 소문자로 정규화해 검사·저장·반환한다")
+        @DisplayName("대문자 이메일은 소문자로 정규화해 해시·저장·반환한다")
         void normalizesToLowercase() {
             when(memberMapper.getMember(MEMBER_NO)).thenReturn(memberWithoutImg());
-            when(memberMapper.existsByEmailExcludingSelf("new@test.com", MEMBER_NO)).thenReturn(false);
+            when(aesUtil.decrypt(STORED_EMAIL)).thenReturn(PLAIN_EMAIL);
+            when(hmacUtil.hash("new@test.com")).thenReturn("hash-new");
+            when(memberMapper.existsByEmailExcludingSelf("hash-new", MEMBER_NO)).thenReturn(false);
+            when(aesUtil.encrypt("new@test.com")).thenReturn("enc-new");
 
             MemberEmailResponse result = memberService.updateMemberEmail(MEMBER_NO, "New@Test.COM");
 
             assertThat(result.email()).isEqualTo("new@test.com");
-            verify(memberMapper).existsByEmailExcludingSelf("new@test.com", MEMBER_NO);
-            verify(memberMapper).updateMemberEmail(MEMBER_NO, "new@test.com");
+            verify(hmacUtil).hash("new@test.com");
+            verify(memberMapper).existsByEmailExcludingSelf("hash-new", MEMBER_NO);
+            verify(memberMapper).updateMemberEmail(MEMBER_NO, "enc-new", "hash-new");
         }
 
         @Test
         @DisplayName("기존 이메일과 동일하면(대소문자 무시) INVALID_INPUT_VALUE, 중복검사·update 미호출")
         void sameAsCurrent() {
             when(memberMapper.getMember(MEMBER_NO)).thenReturn(memberWithoutImg()); // email = allergyout@gmail.com
+            when(aesUtil.decrypt(STORED_EMAIL)).thenReturn(PLAIN_EMAIL);
 
             assertThatThrownBy(() -> memberService.updateMemberEmail(MEMBER_NO, "ALLERGYOUT@Gmail.com"))
                     .isInstanceOf(CustomException.class)
@@ -196,14 +217,16 @@ class MemberServiceTest {
                         assertThat(ce.getDetails()).containsExactly(entry("email", "기존 이메일과 동일합니다."));
                     });
             verify(memberMapper, never()).existsByEmailExcludingSelf(any(), any());
-            verify(memberMapper, never()).updateMemberEmail(any(), any());
+            verify(memberMapper, never()).updateMemberEmail(any(), any(), any());
         }
 
         @Test
         @DisplayName("다른 회원이 사용 중이면 DUPLICATE_VALUE + data{email}, update 미호출")
         void duplicated() {
             when(memberMapper.getMember(MEMBER_NO)).thenReturn(memberWithoutImg());
-            when(memberMapper.existsByEmailExcludingSelf("dup@test.com", MEMBER_NO)).thenReturn(true);
+            when(aesUtil.decrypt(STORED_EMAIL)).thenReturn(PLAIN_EMAIL);
+            when(hmacUtil.hash("dup@test.com")).thenReturn("hash-dup");
+            when(memberMapper.existsByEmailExcludingSelf("hash-dup", MEMBER_NO)).thenReturn(true);
 
             assertThatThrownBy(() -> memberService.updateMemberEmail(MEMBER_NO, "dup@test.com"))
                     .isInstanceOf(CustomException.class)
@@ -212,7 +235,7 @@ class MemberServiceTest {
                         assertThat(ce.getErrorCode()).isEqualTo(ErrorCode.DUPLICATE_VALUE);
                         assertThat(ce.getDetails()).containsExactly(entry("email", "이미 사용 중인 이메일입니다."));
                     });
-            verify(memberMapper, never()).updateMemberEmail(any(), any());
+            verify(memberMapper, never()).updateMemberEmail(any(), any(), any());
         }
 
         @Test
@@ -232,21 +255,25 @@ class MemberServiceTest {
     class UpdateMemberPhone {
 
         @Test
-        @DisplayName("중복 아니면 수정 후 연락처를 반환한다")
+        @DisplayName("중복 아니면 암호화·해시해서 수정 후 연락처를 반환한다")
         void success() {
             when(memberMapper.getMember(MEMBER_NO)).thenReturn(memberWithoutImg());
-            when(memberMapper.existsByPhoneExcludingSelf("01099998888", MEMBER_NO)).thenReturn(false);
+            when(aesUtil.decrypt(STORED_PHONE)).thenReturn(PLAIN_PHONE);
+            when(hmacUtil.hash("01099998888")).thenReturn("hash-phone");
+            when(memberMapper.existsByPhoneExcludingSelf("hash-phone", MEMBER_NO)).thenReturn(false);
+            when(aesUtil.encrypt("01099998888")).thenReturn("enc-phone");
 
             MemberPhoneResponse result = memberService.updateMemberPhone(MEMBER_NO, "01099998888");
 
             assertThat(result.phone()).isEqualTo("01099998888");
-            verify(memberMapper).updateMemberPhone(MEMBER_NO, "01099998888");
+            verify(memberMapper).updateMemberPhone(MEMBER_NO, "enc-phone", "hash-phone");
         }
 
         @Test
         @DisplayName("기존 연락처와 동일하면 INVALID_INPUT_VALUE, 중복검사·update 미호출")
         void sameAsCurrent() {
             when(memberMapper.getMember(MEMBER_NO)).thenReturn(memberWithoutImg()); // phone = 01012341234
+            when(aesUtil.decrypt(STORED_PHONE)).thenReturn(PLAIN_PHONE);
 
             assertThatThrownBy(() -> memberService.updateMemberPhone(MEMBER_NO, "01012341234"))
                     .isInstanceOf(CustomException.class)
@@ -256,14 +283,16 @@ class MemberServiceTest {
                         assertThat(ce.getDetails()).containsExactly(entry("phone", "기존 연락처와 동일합니다."));
                     });
             verify(memberMapper, never()).existsByPhoneExcludingSelf(any(), any());
-            verify(memberMapper, never()).updateMemberPhone(any(), any());
+            verify(memberMapper, never()).updateMemberPhone(any(), any(), any());
         }
 
         @Test
         @DisplayName("다른 회원이 사용 중이면 DUPLICATE_VALUE + data{phone}, update 미호출")
         void duplicated() {
             when(memberMapper.getMember(MEMBER_NO)).thenReturn(memberWithoutImg());
-            when(memberMapper.existsByPhoneExcludingSelf("01099998888", MEMBER_NO)).thenReturn(true);
+            when(aesUtil.decrypt(STORED_PHONE)).thenReturn(PLAIN_PHONE);
+            when(hmacUtil.hash("01099998888")).thenReturn("hash-phone");
+            when(memberMapper.existsByPhoneExcludingSelf("hash-phone", MEMBER_NO)).thenReturn(true);
 
             assertThatThrownBy(() -> memberService.updateMemberPhone(MEMBER_NO, "01099998888"))
                     .isInstanceOf(CustomException.class)
@@ -272,7 +301,7 @@ class MemberServiceTest {
                         assertThat(ce.getErrorCode()).isEqualTo(ErrorCode.DUPLICATE_VALUE);
                         assertThat(ce.getDetails()).containsExactly(entry("phone", "이미 사용 중인 연락처입니다."));
                     });
-            verify(memberMapper, never()).updateMemberPhone(any(), any());
+            verify(memberMapper, never()).updateMemberPhone(any(), any(), any());
         }
     }
 
