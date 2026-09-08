@@ -11,6 +11,8 @@ import com.allergyout.global.exception.ErrorCode;
 import com.allergyout.rasp.model.dao.RaspMapper;
 import com.allergyout.rasp.model.dto.DeviceResponse;
 import com.allergyout.rasp.model.dto.StepLogCreateRequest;
+import com.allergyout.rasp.model.dto.TodayStepListResponse;
+import com.allergyout.rasp.model.dto.WeeklyStepListResponse;
 
 import lombok.RequiredArgsConstructor;
 
@@ -40,11 +42,7 @@ public class RaspService {
     // 내 라즈베리파이 번호 조회. 등록 안 했으면 404 (걸음 0건과 구분 — 프론트가 "먼저 등록해 주세요" 안내).
     @Transactional(readOnly = true)
     public DeviceResponse getDevice(Long memberNo) {
-        Long deviceNo = raspMapper.getDeviceNoByMemberNo(memberNo);
-        if (deviceNo == null) {
-            throw new CustomException(ErrorCode.DEVICE_NOT_FOUND);
-        }
-        return new DeviceResponse(deviceNo);
+        return new DeviceResponse(getDeviceNoOrThrow(memberNo));
     }
 
     // 라즈베리파이가 보고한 그날 누적 걸음. 보고마다 새 행 INSERT (UPDATE 안 함).
@@ -55,5 +53,28 @@ public class RaspService {
             throw new CustomException(ErrorCode.DEVICE_NOT_FOUND);
         }
         raspMapper.insertStepLog(request.deviceNo(), request.todaySteps());
+    }
+
+    // 오늘 인트라데이 곡선 (자정 리셋). 미등록 404, 데이터 없으면 빈 points.
+    @Transactional(readOnly = true)
+    public TodayStepListResponse getTodaySteps(Long memberNo) {
+        Long deviceNo = getDeviceNoOrThrow(memberNo);
+        return TodayStepListResponse.of(deviceNo, raspMapper.getTodayStepPoints(deviceNo));
+    }
+
+    // 지난 7일(오늘 포함) 일자별 총 걸음. 미등록 404, 데이터 없으면 빈 days.
+    @Transactional(readOnly = true)
+    public WeeklyStepListResponse getWeekSteps(Long memberNo) {
+        Long deviceNo = getDeviceNoOrThrow(memberNo);
+        return WeeklyStepListResponse.of(deviceNo, raspMapper.getDailyStepCounts(deviceNo));
+    }
+
+    // memberNo 의 deviceNo. 미등록이면 DEVICE_NOT_FOUND (device 조회·걸음 조회 공통 규칙).
+    private Long getDeviceNoOrThrow(Long memberNo) {
+        Long deviceNo = raspMapper.getDeviceNoByMemberNo(memberNo);
+        if (deviceNo == null) {
+            throw new CustomException(ErrorCode.DEVICE_NOT_FOUND);
+        }
+        return deviceNo;
     }
 }

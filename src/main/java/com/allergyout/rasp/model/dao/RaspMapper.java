@@ -1,9 +1,13 @@
 package com.allergyout.rasp.model.dao;
 
+import java.util.List;
 import java.util.Map;
 
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+
+import com.allergyout.rasp.model.vo.DailyStepCount;
+import com.allergyout.rasp.model.vo.TodayStepPoint;
 
 @Mapper
 public interface RaspMapper {
@@ -21,4 +25,10 @@ public interface RaspMapper {
     // 보고마다 새 행 INSERT (UPDATE 안 함). PK·CREATE_DATE 는 IDENTITY / DB default.
     void insertStepLog(@Param("deviceNo") Long deviceNo,
                        @Param("todaySteps") Integer todaySteps);
+
+    // 오늘(TRUNC(SYSDATE) 이후) 보고 기록 전부, 시간 오름차순.
+    List<TodayStepPoint> getTodayStepPoints(Long deviceNo);
+
+    // 오늘 포함 7일간 일자별 MAX(TODAY_STEPS). 데이터 없는 날은 행 없음.
+    List<DailyStepCount> getDailyStepCounts(Long deviceNo);
 }

@@ -28,4 +28,25 @@
         VALUES (#{deviceNo}, #{todaySteps})
     </insert>
 
+    <!-- 오늘(자정 이후) 보고 기록. 누적값이라 시간순이면 우상향 곡선. -->
+    <select id="getTodayStepPoints" resultType="TodayStepPoint">
+        SELECT CREATE_DATE
+             , TODAY_STEPS
+          FROM STEP_LOG
+         WHERE DEVICE_NO = #{deviceNo}
+           AND CREATE_DATE >= TRUNC(SYSDATE)
+         ORDER BY CREATE_DATE
+    </select>
+
+    <!-- 오늘 포함 7일. 하루 총 걸음 = 그날 MAX(TODAY_STEPS). 데이터 없는 날은 행 자체가 없음. -->
+    <select id="getDailyStepCounts" resultType="DailyStepCount">
+        SELECT TRUNC(CREATE_DATE) AS STEP_DATE
+             , MAX(TODAY_STEPS)   AS STEPS
+          FROM STEP_LOG
+         WHERE DEVICE_NO = #{deviceNo}
+           AND CREATE_DATE >= TRUNC(SYSDATE) - 6
+         GROUP BY TRUNC(CREATE_DATE)
+         ORDER BY STEP_DATE
+    </select>
+
 </mapper>

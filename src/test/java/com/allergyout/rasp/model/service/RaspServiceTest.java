@@ -9,6 +9,9 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 
 import org.junit.jupiter.api.DisplayName;
@@ -23,6 +26,10 @@ import com.allergyout.global.exception.ErrorCode;
 import com.allergyout.rasp.model.dao.RaspMapper;
 import com.allergyout.rasp.model.dto.DeviceResponse;
 import com.allergyout.rasp.model.dto.StepLogCreateRequest;
+import com.allergyout.rasp.model.dto.TodayStepListResponse;
+import com.allergyout.rasp.model.dto.WeeklyStepListResponse;
+import com.allergyout.rasp.model.vo.DailyStepCount;
+import com.allergyout.rasp.model.vo.TodayStepPoint;
 
 @ExtendWith(MockitoExtension.class)
 class RaspServiceTest {
@@ -112,5 +119,71 @@ class RaspServiceTest {
         raspService.createStepLog(new StepLogCreateRequest(7L, 0));
 
         verify(raspMapper).insertStepLog(7L, 0);
+    }
+
+    @Test
+    @DisplayName("오늘 조회: 등록돼 있으면 deviceNo + 포인트 목록을 조립해 반환한다")
+    void getTodaySteps_success() {
+        when(raspMapper.getDeviceNoByMemberNo(MEMBER_NO)).thenReturn(7L);
+        when(raspMapper.getTodayStepPoints(7L)).thenReturn(List.of(
+                new TodayStepPoint(LocalDateTime.of(2026, 9, 8, 8, 0, 0), 1200),
+                new TodayStepPoint(LocalDateTime.of(2026, 9, 8, 14, 30, 0), 5234)));
+
+        TodayStepListResponse res = raspService.getTodaySteps(MEMBER_NO);
+
+        assertThat(res.deviceNo()).isEqualTo(7L);
+        assertThat(res.points()).hasSize(2);
+        assertThat(res.points().get(1).steps()).isEqualTo(5234);
+        assertThat(res.points().get(1).time()).isEqualTo(LocalDateTime.of(2026, 9, 8, 14, 30, 0));
+    }
+
+    @Test
+    @DisplayName("오늘 조회: 등록됐지만 걸음 0건이면 빈 points (에러 아님)")
+    void getTodaySteps_empty() {
+        when(raspMapper.getDeviceNoByMemberNo(MEMBER_NO)).thenReturn(7L);
+        when(raspMapper.getTodayStepPoints(7L)).thenReturn(List.of());
+
+        TodayStepListResponse res = raspService.getTodaySteps(MEMBER_NO);
+
+        assertThat(res.deviceNo()).isEqualTo(7L);
+        assertThat(res.points()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("오늘 조회: 미등록이면 DEVICE_NOT_FOUND, 걸음 쿼리 미호출")
+    void getTodaySteps_notRegistered() {
+        when(raspMapper.getDeviceNoByMemberNo(MEMBER_NO)).thenReturn(null);
+
+        assertThatThrownBy(() -> raspService.getTodaySteps(MEMBER_NO))
+                .isInstanceOfSatisfying(CustomException.class,
+                        ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.DEVICE_NOT_FOUND));
+        verify(raspMapper, never()).getTodayStepPoints(any());
+    }
+
+    @Test
+    @DisplayName("주간 조회: 등록돼 있으면 deviceNo + 일자별 목록을 조립해 반환한다")
+    void getWeekSteps_success() {
+        when(raspMapper.getDeviceNoByMemberNo(MEMBER_NO)).thenReturn(7L);
+        when(raspMapper.getDailyStepCounts(7L)).thenReturn(List.of(
+                new DailyStepCount(LocalDate.of(2026, 9, 2), 9210),
+                new DailyStepCount(LocalDate.of(2026, 9, 8), 5234)));
+
+        WeeklyStepListResponse res = raspService.getWeekSteps(MEMBER_NO);
+
+        assertThat(res.deviceNo()).isEqualTo(7L);
+        assertThat(res.days()).hasSize(2);
+        assertThat(res.days().get(0).date()).isEqualTo(LocalDate.of(2026, 9, 2));
+        assertThat(res.days().get(0).steps()).isEqualTo(9210);
+    }
+
+    @Test
+    @DisplayName("주간 조회: 미등록이면 DEVICE_NOT_FOUND, 걸음 쿼리 미호출")
+    void getWeekSteps_notRegistered() {
+        when(raspMapper.getDeviceNoByMemberNo(MEMBER_NO)).thenReturn(null);
+
+        assertThatThrownBy(() -> raspService.getWeekSteps(MEMBER_NO))
+                .isInstanceOfSatisfying(CustomException.class,
+                        ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.DEVICE_NOT_FOUND));
+        verify(raspMapper, never()).getDailyStepCounts(any());
     }
 }
