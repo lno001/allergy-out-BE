@@ -211,13 +211,14 @@ class RecipeApiServerTest {
     // 목록 조회 end-to-end: GET /api/recipes → 200, data 에 recipes[] + pageInfo(offset·totalPages 포함),
     // createDate 는 "yyyy-MM-dd" 로 직렬화. 인증 없이도 됨.
     @Test
-    @DisplayName("실서버 GET /api/recipes → 200, recipes + pageInfo, createDate 포맷")
+    @DisplayName("실서버 GET /api/recipes → 200, recipes + pageInfo, createDate 포맷 + 신규 필드")
     void getRecipeList_realServer() {
-        when(recipeMapper.getRecipeList(0, 20)).thenReturn(List.of(
+        when(recipeMapper.getRecipeList(0, 20, null, null, null, null, null, "latest")).thenReturn(List.of(
                 new RecipeListItem(101L, "된장국", "doenjang.jpg",
                         "https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/1/101.jpg",
-                        "관리자", LocalDate.of(2026, 8, 21))));
-        when(recipeMapper.countRecipeList()).thenReturn(37);
+                        "관리자", LocalDate.of(2026, 8, 21),
+                        "국&찌개", "끓이기", 120.5, "두부", 88L)));
+        when(recipeMapper.countRecipeList(null, null, null, null, null)).thenReturn(37);
 
         String body = client.get().uri("/api/recipes")
                 .retrieve()
@@ -231,20 +232,26 @@ class RecipeApiServerTest {
                 .contains("\"recipesImgPath\":\"https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/1/101.jpg\"")
                 .contains("\"memberName\":\"관리자\"")
                 .contains("\"createDate\":\"2026-08-21\"")
+                .contains("\"recipeType\":\"국&찌개\"")
+                .contains("\"cookingMethod\":\"끓이기\"")
+                .contains("\"calorie\":120.5")
+                .contains("\"mainMaterial\":\"두부\"")
+                .contains("\"viewCount\":88")
                 .contains("\"totalElements\":37")
                 .contains("\"totalPages\":2")
                 .contains("\"offset\":0");
     }
 
-    // 키워드 검색 end-to-end: GET /api/recipes?keyword=된장 → 비회원 키워드 매퍼로 라우팅
+    // 키워드 검색 end-to-end: GET /api/recipes?keyword=된장 → 통합 목록 매퍼에 keyword 전달
     @Test
-    @DisplayName("실서버 GET /api/recipes?keyword=된장 → 200, getRecipeListByKeyword 로 라우팅")
+    @DisplayName("실서버 GET /api/recipes?keyword=된장 → 200, keyword 가 매퍼로 전달")
     void getRecipeList_keyword_realServer() {
-        when(recipeMapper.getRecipeListByKeyword(0, 20, "된장")).thenReturn(List.of(
+        when(recipeMapper.getRecipeList(0, 20, null, "된장", null, null, null, "latest")).thenReturn(List.of(
                 new RecipeListItem(101L, "된장국", "doenjang.jpg",
                         "https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/1/101.jpg",
-                        "관리자", LocalDate.of(2026, 8, 21))));
-        when(recipeMapper.countRecipeListByKeyword("된장")).thenReturn(1);
+                        "관리자", LocalDate.of(2026, 8, 21),
+                        "국&찌개", "끓이기", 120.5, "두부", 5L)));
+        when(recipeMapper.countRecipeList(null, "된장", null, null, null)).thenReturn(1);
 
         String body = client.get().uri("/api/recipes?keyword=된장")
                 .retrieve()
@@ -254,19 +261,47 @@ class RecipeApiServerTest {
                 .contains("\"code\":200")
                 .contains("\"recipeNo\":101")
                 .contains("\"totalElements\":1");
-        Mockito.verify(recipeMapper, Mockito.never()).getRecipeList(anyInt(), anyInt());
+        Mockito.verify(recipeMapper).getRecipeList(0, 20, null, "된장", null, null, null, "latest");
     }
 
-    // 필터 end-to-end: GET /api/recipes/filter?keyword=&excludeMaterials= → 통합 필터 매퍼로 라우팅.
-    // 인증 없이 호출 → memberNo null 로 매퍼에 전달. excludeMaterials 는 반복 파라미터.
+    // 필터 파라미터 end-to-end: recipeType·cookingMethod·sort 가 매퍼로 전달되는지
     @Test
-    @DisplayName("실서버 GET /api/recipes/filter?keyword=된장&excludeMaterials=계란&excludeMaterials=우유 → 200")
-    void getFilteredRecipeList_realServer() {
-        when(recipeMapper.getFilteredRecipeList(0, 20, null, "된장", List.of("계란", "우유")))
+    @DisplayName("실서버 GET /api/recipes?recipeType=반찬&cookingMethod=굽기&sort=popular → 200, 필터·정렬 전달")
+    void getRecipeList_filterParams_realServer() {
+        when(recipeMapper.getRecipeList(0, 20, null, null, null, "반찬", "굽기", "popular")).thenReturn(List.of());
+        when(recipeMapper.countRecipeList(null, null, null, "반찬", "굽기")).thenReturn(0);
+
+        var res = client.get().uri("/api/recipes?recipeType=반찬&cookingMethod=굽기&sort=popular")
+                .retrieve().toEntity(String.class);
+
+        assertThat(res.getStatusCode()).isEqualTo(HttpStatus.OK);
+        Mockito.verify(recipeMapper).getRecipeList(0, 20, null, null, null, "반찬", "굽기", "popular");
+    }
+
+    // enum 밖 값 → @Valid → 400
+    @Test
+    @DisplayName("실서버 GET /api/recipes?recipeType=삶기 → 400 (enum 밖 값)")
+    void getRecipeList_invalidRecipeType_realServer() {
+        try {
+            client.get().uri("/api/recipes?recipeType=삶기").retrieve().toBodilessEntity();
+        } catch (RestClientResponseException e) {
+            assertThat(e.getStatusCode().value()).isEqualTo(400);
+        }
+        Mockito.verify(recipeMapper, Mockito.never())
+                .getRecipeList(anyInt(), anyInt(), any(), any(), any(), any(), any(), anyString());
+    }
+
+    // 필터 end-to-end: GET /api/recipes/filter → @Deprecated alias 는 통합 목록 매퍼로 라우팅 (동작 동일).
+    // 인증 없이 호출 → memberNo null. excludeMaterials 는 반복 파라미터.
+    @Test
+    @DisplayName("실서버 GET /api/recipes/filter?keyword=된장&excludeMaterials=계란&excludeMaterials=우유 → 200 (alias)")
+    void getFilteredRecipeList_aliasRoutesToUnified() {
+        when(recipeMapper.getRecipeList(0, 20, null, "된장", List.of("계란", "우유"), null, null, "latest"))
                 .thenReturn(List.of(new RecipeListItem(101L, "된장국", "doenjang.jpg",
                         "https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/1/101.jpg",
-                        "관리자", LocalDate.of(2026, 8, 21))));
-        when(recipeMapper.countFilteredRecipeList(null, "된장", List.of("계란", "우유"))).thenReturn(1);
+                        "관리자", LocalDate.of(2026, 8, 21),
+                        "국&찌개", "끓이기", 120.5, "두부", 5L)));
+        when(recipeMapper.countRecipeList(null, "된장", List.of("계란", "우유"), null, null)).thenReturn(1);
 
         String body = client.get().uri("/api/recipes/filter?keyword=된장&excludeMaterials=계란&excludeMaterials=우유")
                 .retrieve()
@@ -283,8 +318,8 @@ class RecipeApiServerTest {
     @Test
     @DisplayName("실서버 GET /api/recipes/filter (조건 없음) → 200, 상세 조회로 안 샘")
     void getFilteredRecipeList_noParams_routesToFilter() {
-        when(recipeMapper.getFilteredRecipeList(0, 20, null, null, null)).thenReturn(List.of());
-        when(recipeMapper.countFilteredRecipeList(null, null, null)).thenReturn(0);
+        when(recipeMapper.getRecipeList(0, 20, null, null, null, null, null, "latest")).thenReturn(List.of());
+        when(recipeMapper.countRecipeList(null, null, null, null, null)).thenReturn(0);
 
         var res = client.get().uri("/api/recipes/filter").retrieve().toEntity(String.class);
 

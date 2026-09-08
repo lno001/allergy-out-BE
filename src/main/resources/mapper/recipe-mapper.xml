@@ -81,7 +81,79 @@
 			    )
     </insert>
 
-    <!-- ========== 비회원 목록 : 삭제만 제외, 최신순, OFFSET 페이징 ==========
+    <!-- ========================================================================
+         목록 조회 (GET /api/recipes) : 목록·검색·필터·정렬 통합 엔드포인트
+         조건 5개를 <where> + <if> 로 조립한다 (전부 선택 — null/빈값이면 그 AND 절이 통째로 빠짐).
+           1) keyword          : 제목(RECIPE_TITLE) 부분일치
+           2) recipeType       : RECIPE_TYPE 완전일치
+           3) cookingMethod    : COOKING_METHOD 완전일치
+           4) memberNo != null : 그 회원 알러지 재료가 든 레시피 제외
+                                 (회원이라도 applyMyAllergy=false 면 Service 가 memberNo=null 로 넘겨 이 절을 생략)
+           5) excludeMaterials : 사용자가 고른 제외 재료가 하나라도 든 레시피 제외
+         keyword·excludeMaterials 는 Service 에서 LIKE 메타문자(\ % _)를 이스케이프해 넘긴다 → ESCAPE '\'.
+         list 와 count 가 아래 <sql id="recipeListWhere"> 를 공유하므로 두 쿼리의 조건이 절대 어긋나지 않는다.
+
+         회원 알러지 제외 서브쿼리 : MATERIAL.MATERIAL_NAME 이 MEMBER_ALLERGY.MATERIAL_NAME 을 "포함"
+         (LIKE '%알러지명%')하면 그 RECIPE_NO 를 NOT IN. '=' 대신 LIKE 는 "땅콩" 알러지가 "땅콩버터" 도 잡도록
+         (과잉 필터 = 알러지에선 안전 방향, fail-closed). MATERIAL.RECIPE_NO 는 NOT NULL 이라 NOT IN 의 NULL 함정 없음.
+
+         <foreach> 동작 : excludeMaterials(List<String>) 를 순회하며 각 항목을
+           mat.MATERIAL_NAME LIKE '%' || #{ex} || '%' ESCAPE '\'
+         로 펼치고 open="(" separator=" OR " close=")" 로 감싼다.
+         예) ["계란","우유"] → ( ... LIKE '%'||'계란'||'%' ESCAPE '\' OR ... LIKE '%'||'우유'||'%' ESCAPE '\' )
+         ======================================================================== -->
+    <sql id="recipeListWhere">
+        <where>
+               r.DEL_YN = 'N'
+
+           <!-- 1) 제목 검색 -->
+           <if test="keyword != null">
+           AND r.RECIPE_TITLE LIKE '%' || #{keyword} || '%' ESCAPE '\'
+           </if>
+
+           <!-- 2) 요리 종류 -->
+           <if test="recipeType != null">
+           AND r.RECIPE_TYPE = #{recipeType}
+           </if>
+
+           <!-- 3) 조리 방법 -->
+           <if test="cookingMethod != null">
+           AND r.COOKING_METHOD = #{cookingMethod}
+           </if>
+
+           <!-- 4) 회원 알러지 재료 제외 -->
+           <if test="memberNo != null">
+           AND r.RECIPE_NO NOT IN (
+                   SELECT
+                          mat.RECIPE_NO
+                     FROM
+                          MATERIAL        mat
+                     JOIN
+                          MEMBER_ALLERGY  ma
+                       ON mat.MATERIAL_NAME LIKE '%' || ma.MATERIAL_NAME || '%'
+                    WHERE
+                          ma.MEMBER_NO = #{memberNo}
+               )
+           </if>
+
+           <!-- 5) 사용자 지정 제외 재료 -->
+           <if test="excludeMaterials != null and excludeMaterials.size() > 0">
+           AND r.RECIPE_NO NOT IN (
+                   SELECT
+                          mat.RECIPE_NO
+                     FROM
+                          MATERIAL mat
+                    WHERE
+                          <foreach collection="excludeMaterials" item="ex" open="(" separator=" OR " close=")">
+                          mat.MATERIAL_NAME LIKE '%' || #{ex} || '%' ESCAPE '\'
+                          </foreach>
+               )
+           </if>
+        </where>
+    </sql>
+
+    <!-- 목록 1페이지. 프로젝션에 신규 필드(RECIPE_TYPE·COOKING_METHOD·CALORIE·MAIN_MATERIAL·VIEW_COUNT) 포함.
+         탄·단·지·나트륨은 목록 제외(상세에서만) — 계약서.
          RECIPE_MAIN_IMG = 원본 파일명 / RECIPES_IMG_PATH = S3 버킷 URL. 프론트 썸네일은 PATH 를 씀. -->
     <select id="getRecipeList" resultType="RecipeListItem">
         SELECT
@@ -91,16 +163,32 @@
             ,  r.RECIPES_IMG_PATH
             ,  m.MEMBER_NAME
             ,  r.CREATE_DATE
+            ,  r.RECIPE_TYPE
+            ,  r.COOKING_METHOD
+            ,  r.CALORIE
+            ,  r.MAIN_MATERIAL
+            ,  r.VIEW_COUNT
           FROM
                RECIPES r
           JOIN
                MEMBER  m
             ON r.MEMBER_NO = m.MEMBER_NO
-         WHERE
-               r.DEL_YN = 'N'
-         ORDER BY
+        <include refid="recipeListWhere"/>
+        <!-- 정렬 : popular = 조회수 내림차순, 그 외(latest) = 최신순. 동점 tie-breaker 로 RECIPE_NO DESC 를 항상 붙여
+             페이지 경계에서 행이 중복·누락되지 않게 한다. sort 는 Service 화이트리스트("popular"|"latest") 통과값. -->
+        <choose>
+            <when test="sort == 'popular'">
+        ORDER BY
+               r.VIEW_COUNT  DESC
+            ,  r.CREATE_DATE DESC
+            ,  r.RECIPE_NO   DESC
+            </when>
+            <otherwise>
+        ORDER BY
                r.CREATE_DATE DESC
             ,  r.RECIPE_NO   DESC
+            </otherwise>
+        </choose>
         OFFSET #{offset} ROWS FETCH NEXT #{size} ROWS ONLY
     </select>
 
@@ -108,274 +196,8 @@
         SELECT
                COUNT(*)
           FROM
-               RECIPES
-         WHERE
-               DEL_YN = 'N'
-    </select>
-
-    <!-- ========== 회원 목록 : 삭제 제외 + 회원 알러지 재료가 든 레시피 제외 ==========
-         MATERIAL.MATERIAL_NAME 이 MEMBER_ALLERGY.MATERIAL_NAME 을 "포함"(LIKE '%알러지명%')하면 그 RECIPE_NO 를 NOT IN.
-         - '=' 대신 LIKE : "땅콩" 알러지가 "땅콩버터"·"볶은 땅콩" 도 잡도록. 과잉 필터는 알러지에선 안전 방향(fail-closed).
-         - 저장 시 재료명 공백 정규화 전제 (프론트 + 등록/알러지 저장 Service). "완벽한 필터 아님" 은 프론트 문구로 안내.
-         - MATERIAL.RECIPE_NO 는 NOT NULL 이라 NOT IN 의 NULL 함정 없음. 알러지 0건이면 서브쿼리 0행 → 제외 없음(정상). -->
-    <select id="getRecipeListForMember" resultType="RecipeListItem">
-        SELECT
-               r.RECIPE_NO
-            ,  r.RECIPE_TITLE
-            ,  r.RECIPE_MAIN_IMG
-            ,  r.RECIPES_IMG_PATH
-            ,  m.MEMBER_NAME
-            ,  r.CREATE_DATE
-          FROM
                RECIPES r
-          JOIN
-               MEMBER  m
-            ON
-               r.MEMBER_NO = m.MEMBER_NO
-         WHERE
-               r.DEL_YN = 'N'
-           AND r.RECIPE_NO NOT IN (
-                   SELECT
-                          mat.RECIPE_NO
-                     FROM
-                          MATERIAL        mat
-                     JOIN
-                          MEMBER_ALLERGY  ma
-                       ON mat.MATERIAL_NAME LIKE '%' || ma.MATERIAL_NAME || '%'
-                    WHERE
-                          ma.MEMBER_NO = #{memberNo}
-               )
-         ORDER BY
-               r.CREATE_DATE DESC
-            ,  r.RECIPE_NO   DESC
-        OFFSET #{offset} ROWS FETCH NEXT #{size} ROWS ONLY
-    </select>
-
-    <select id="countRecipeListForMember" resultType="int">
-        SELECT
-               COUNT(*)
-          FROM
-               RECIPES r
-         WHERE
-               r.DEL_YN = 'N'
-           AND r.RECIPE_NO NOT IN
-           		(
-                   SELECT
-                          mat.RECIPE_NO
-                     FROM
-                          MATERIAL mat
-                     JOIN
-                          MEMBER_ALLERGY  ma
-                       ON
-                          mat.MATERIAL_NAME LIKE '%' || ma.MATERIAL_NAME || '%'
-                    WHERE
-                          ma.MEMBER_NO = #{memberNo}
-               )
-    </select>
-
-    <!-- ========== 키워드 검색 (비회원) : 위 비회원 목록 + 제목에 keyword 포함 ==========
-         검색 대상 = RECIPE_TITLE 만 (명세서는 "제목 또는 재료명"이지만 팀 결정으로 제목만).
-         재료명 검색이 필요해지면 아래에 OR EXISTS(MATERIAL ... LIKE) 만 추가하면 됨.
-         keyword 는 Service 에서 LIKE 메타문자(\ % _)를 이스케이프해 넘긴다 → ESCAPE '\' 로 문자 그대로 매칭. -->
-    <select id="getRecipeListByKeyword" resultType="RecipeListItem">
-        SELECT
-               r.RECIPE_NO
-            ,  r.RECIPE_TITLE
-            ,  r.RECIPE_MAIN_IMG
-            ,  r.RECIPES_IMG_PATH
-            ,  m.MEMBER_NAME
-            ,  r.CREATE_DATE
-          FROM
-               RECIPES r
-          JOIN
-               MEMBER  m
-            ON r.MEMBER_NO = m.MEMBER_NO
-         WHERE
-               r.DEL_YN = 'N'
-           AND r.RECIPE_TITLE LIKE '%' || #{keyword} || '%' ESCAPE '\'
-         ORDER BY
-               r.CREATE_DATE DESC
-            ,  r.RECIPE_NO   DESC
-        OFFSET #{offset} ROWS FETCH NEXT #{size} ROWS ONLY
-    </select>
-
-    <select id="countRecipeListByKeyword" resultType="int">
-        SELECT
-               COUNT(*)
-          FROM
-               RECIPES r
-         WHERE
-               r.DEL_YN = 'N'
-           AND r.RECIPE_TITLE LIKE '%' || #{keyword} || '%' ESCAPE '\'
-    </select>
-
-    <!-- ========== 키워드 검색 (회원) : 알러지 재료 제외 + 제목에 keyword 포함 ========== -->
-    <select id="getRecipeListForMemberByKeyword" resultType="RecipeListItem">
-        SELECT
-               r.RECIPE_NO
-            ,  r.RECIPE_TITLE
-            ,  r.RECIPE_MAIN_IMG
-            ,  r.RECIPES_IMG_PATH
-            ,  m.MEMBER_NAME
-            ,  r.CREATE_DATE
-          FROM
-               RECIPES r
-          JOIN
-               MEMBER  m
-            ON
-               r.MEMBER_NO = m.MEMBER_NO
-         WHERE
-               r.DEL_YN = 'N'
-           AND r.RECIPE_NO NOT IN (
-                   SELECT
-                          mat.RECIPE_NO
-                     FROM
-                          MATERIAL        mat
-                     JOIN
-                          MEMBER_ALLERGY  ma
-                       ON mat.MATERIAL_NAME LIKE '%' || ma.MATERIAL_NAME || '%'
-                    WHERE
-                          ma.MEMBER_NO = #{memberNo}
-               )
-           AND r.RECIPE_TITLE LIKE '%' || #{keyword} || '%' ESCAPE '\'
-         ORDER BY
-               r.CREATE_DATE DESC
-            ,  r.RECIPE_NO   DESC
-        OFFSET #{offset} ROWS FETCH NEXT #{size} ROWS ONLY
-    </select>
-
-    <select id="countRecipeListForMemberByKeyword" resultType="int">
-        SELECT
-               COUNT(*)
-          FROM
-               RECIPES r
-         WHERE
-               r.DEL_YN = 'N'
-           AND r.RECIPE_NO NOT IN (
-                   SELECT
-                          mat.RECIPE_NO
-                     FROM
-                          MATERIAL        mat
-                     JOIN
-                          MEMBER_ALLERGY  ma
-                       ON mat.MATERIAL_NAME LIKE '%' || ma.MATERIAL_NAME || '%'
-                    WHERE
-                          ma.MEMBER_NO = #{memberNo}
-               )
-           AND r.RECIPE_TITLE LIKE '%' || #{keyword} || '%' ESCAPE '\'
-    </select>
-
-    <!-- ========================================================================
-         필터 조회 (GET /api/recipes/filter) : 프론트 목록 통합 엔드포인트
-         조건 3개를 <if> 로 조립한다 (셋 다 선택 — null/빈값이면 그 AND 절이 통째로 빠짐).
-           1) keyword          : 제목(RECIPE_TITLE) 부분일치
-           2) memberNo != null : 그 회원 알러지 재료가 든 레시피 제외 (기존 회원 목록과 동일 서브쿼리)
-           3) excludeMaterials : 사용자가 고른 제외 재료가 하나라도 든 레시피 제외
-         keyword·excludeMaterials 는 Service 에서 LIKE 메타문자(\ % _)를 이스케이프해 넘긴다 → ESCAPE '\'.
-
-         <foreach> 동작 : excludeMaterials(List<String>) 를 순회하며 각 항목을
-           mat.MATERIAL_NAME LIKE '%' || #{ex} || '%' ESCAPE '\'
-         로 펼치고, open="(" separator=" OR " close=")" 로 감싼다.
-         예) excludeMaterials = ["계란", "우유"] →
-           ( mat.MATERIAL_NAME LIKE '%'||'계란'||'%' ESCAPE '\'
-             OR mat.MATERIAL_NAME LIKE '%'||'우유'||'%' ESCAPE '\' )
-         → 그 재료가 든 RECIPE_NO 집합을 만들어 r.RECIPE_NO NOT IN 으로 뺀다.
-         ======================================================================== -->
-    <select id="getFilteredRecipeList" resultType="RecipeListItem">
-        SELECT
-               r.RECIPE_NO
-            ,  r.RECIPE_TITLE
-            ,  r.RECIPE_MAIN_IMG
-            ,  r.RECIPES_IMG_PATH
-            ,  m.MEMBER_NAME
-            ,  r.CREATE_DATE
-          FROM
-               RECIPES r
-          JOIN
-               MEMBER  m
-            ON r.MEMBER_NO = m.MEMBER_NO
-         <where>
-               r.DEL_YN = 'N'
-
-           <!-- 1) 제목 검색 -->
-           <if test="keyword != null">
-           AND r.RECIPE_TITLE LIKE '%' || #{keyword} || '%' ESCAPE '\'
-           </if>
-
-           <!-- 2) 회원 알러지 재료 제외 -->
-           <if test="memberNo != null">
-           AND r.RECIPE_NO NOT IN (
-                   SELECT
-                          mat.RECIPE_NO
-                     FROM
-                          MATERIAL        mat
-                     JOIN
-                          MEMBER_ALLERGY  ma
-                       ON mat.MATERIAL_NAME LIKE '%' || ma.MATERIAL_NAME || '%'
-                    WHERE
-                          ma.MEMBER_NO = #{memberNo}
-               )
-           </if>
-
-           <!-- 3) 사용자 지정 제외 재료 -->
-           <if test="excludeMaterials != null and excludeMaterials.size() > 0">
-           AND r.RECIPE_NO NOT IN (
-                   SELECT
-                          mat.RECIPE_NO
-                     FROM
-                          MATERIAL mat
-                    WHERE
-                          <foreach collection="excludeMaterials" item="ex" open="(" separator=" OR " close=")">
-                          mat.MATERIAL_NAME LIKE '%' || #{ex} || '%' ESCAPE '\'
-                          </foreach>
-               )
-           </if>
-         </where>
-         ORDER BY
-               r.CREATE_DATE DESC
-            ,  r.RECIPE_NO   DESC
-        OFFSET #{offset} ROWS FETCH NEXT #{size} ROWS ONLY
-    </select>
-
-    <select id="countFilteredRecipeList" resultType="int">
-        SELECT
-               COUNT(*)
-          FROM
-               RECIPES r
-         <where>
-               r.DEL_YN = 'N'
-
-           <if test="keyword != null">
-           AND r.RECIPE_TITLE LIKE '%' || #{keyword} || '%' ESCAPE '\'
-           </if>
-
-           <if test="memberNo != null">
-           AND r.RECIPE_NO NOT IN (
-                   SELECT
-                          mat.RECIPE_NO
-                     FROM
-                          MATERIAL        mat
-                     JOIN
-                          MEMBER_ALLERGY  ma
-                       ON mat.MATERIAL_NAME LIKE '%' || ma.MATERIAL_NAME || '%'
-                    WHERE
-                          ma.MEMBER_NO = #{memberNo}
-               )
-           </if>
-
-           <if test="excludeMaterials != null and excludeMaterials.size() > 0">
-           AND r.RECIPE_NO NOT IN (
-                   SELECT
-                          mat.RECIPE_NO
-                     FROM
-                          MATERIAL mat
-                    WHERE
-                          <foreach collection="excludeMaterials" item="ex" open="(" separator=" OR " close=")">
-                          mat.MATERIAL_NAME LIKE '%' || #{ex} || '%' ESCAPE '\'
-                          </foreach>
-               )
-           </if>
-         </where>
+        <include refid="recipeListWhere"/>
     </select>
 
     <!-- ========================================================================

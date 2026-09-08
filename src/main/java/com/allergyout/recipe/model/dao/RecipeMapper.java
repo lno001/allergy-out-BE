@@ -24,47 +24,31 @@ public interface RecipeMapper {
 
     void insertRecipeStep(RecipeStep step);
 
-    // ---- 목록 조회 (비회원) : RECIPES ⨝ MEMBER, DEL_YN='N', 최신순, OFFSET 페이징 ----
-    List<RecipeListItem> getRecipeList(@Param("offset") int offset, @Param("size") int size);
+    // ---- 목록 조회 (GET /api/recipes) : 목록·검색·필터·정렬 통합 ----
+    //  하나의 동적 쿼리로 조립한다. 조건은 전부 선택 — null/빈값이면 그 조건이 통째로 빠진다.
+    //   offset/size      : 페이징 (Service 가 PageInfo 로 계산)
+    //   memberNo         : null 이면 알러지 제외 안 함. 회원이라도 applyMyAllergy=false 면 Service 가 null 로 넘김
+    //                      (Long 박싱 — 원시형이면 <if> null 체크 불가)
+    //   keyword          : 제목(RECIPE_TITLE) 부분일치. Service 에서 LIKE 메타문자 이스케이프 완료 → 쿼리는 ESCAPE '\'
+    //   excludeMaterials : 그 재료가 하나라도 든 레시피 제외. 각 항목 이스케이프 완료
+    //   recipeType       : RECIPE_TYPE 완전일치
+    //   cookingMethod    : COOKING_METHOD 완전일치
+    //   sort             : "popular"(VIEW_COUNT DESC) | 그 외 최신순. Service 화이트리스트 통과값이라 ${} 없이 <choose> 로 분기
+    List<RecipeListItem> getRecipeList(@Param("offset") int offset,
+                                       @Param("size") int size,
+                                       @Param("memberNo") Long memberNo,
+                                       @Param("keyword") String keyword,
+                                       @Param("excludeMaterials") List<String> excludeMaterials,
+                                       @Param("recipeType") String recipeType,
+                                       @Param("cookingMethod") String cookingMethod,
+                                       @Param("sort") String sort);
 
-    int countRecipeList();
-
-    // ---- 목록 조회 (회원) : 위 + 회원 알러지 재료가 들어간 레시피는 제외 ----
-    List<RecipeListItem> getRecipeListForMember(@Param("offset") int offset,
-                                                @Param("size") int size,
-                                                @Param("memberNo") long memberNo);
-
-    int countRecipeListForMember(long memberNo);
-
-    // ---- 키워드 검색 (비회원) : 위 + 제목(RECIPE_TITLE) LIKE. keyword 는 Service 에서 이스케이프 완료(ESCAPE '\') ----
-    List<RecipeListItem> getRecipeListByKeyword(@Param("offset") int offset,
-                                                @Param("size") int size,
-                                                @Param("keyword") String keyword);
-
-    int countRecipeListByKeyword(@Param("keyword") String keyword);
-
-    // ---- 키워드 검색 (회원) : 알러지 제외 + 제목(RECIPE_TITLE) LIKE ----
-    List<RecipeListItem> getRecipeListForMemberByKeyword(@Param("offset") int offset,
-                                                         @Param("size") int size,
-                                                         @Param("memberNo") long memberNo,
-                                                         @Param("keyword") String keyword);
-
-    int countRecipeListForMemberByKeyword(@Param("memberNo") long memberNo,
-                                          @Param("keyword") String keyword);
-
-    // ---- 필터 조회 : 프론트 목록 통합 엔드포인트. 조건 3개를 <if> 로 조립 ----
-    //  keyword          : null 이면 제목 조건 생략 (Service 에서 이스케이프 완료, 쿼리는 ESCAPE '\')
-    //  memberNo         : null(비회원)이면 알러지 제외 조건 생략. Long 박싱 (원시형이면 <if> null 체크 불가)
-    //  excludeMaterials : null/빈 리스트면 제외 재료 조건 생략. 각 항목 이스케이프 완료
-    List<RecipeListItem> getFilteredRecipeList(@Param("offset") int offset,
-                                               @Param("size") int size,
-                                               @Param("memberNo") Long memberNo,
-                                               @Param("keyword") String keyword,
-                                               @Param("excludeMaterials") List<String> excludeMaterials);
-
-    int countFilteredRecipeList(@Param("memberNo") Long memberNo,
-                                @Param("keyword") String keyword,
-                                @Param("excludeMaterials") List<String> excludeMaterials);
+    // 위와 같은 조건(페이징·정렬 제외)으로 전체 건수. totalPages 계산용 — <where> 조각을 getRecipeList 와 공유한다.
+    int countRecipeList(@Param("memberNo") Long memberNo,
+                        @Param("keyword") String keyword,
+                        @Param("excludeMaterials") List<String> excludeMaterials,
+                        @Param("recipeType") String recipeType,
+                        @Param("cookingMethod") String cookingMethod);
 
     // ---- 상세 조회 : 집계 조회이므로 다중 쿼리 + Service 조립 ----
 
