@@ -72,6 +72,14 @@ public class RecipeService {
             recipeParam.put("recipeInfo", request.recipeInfo());
             recipeParam.put("recipeMainImg", mainImg.getOriginalFilename());
             recipeParam.put("recipesImgPath",mainImgUrl);
+            recipeParam.put("cookingMethod", request.cookingMethod());
+            recipeParam.put("recipeType", request.recipeType());
+            recipeParam.put("calorie", request.calorie());
+            recipeParam.put("carbohydrate", request.carbohydrate());
+            recipeParam.put("protein", request.protein());
+            recipeParam.put("fat", request.fat());
+            recipeParam.put("sodium", request.sodium());
+            recipeParam.put("mainMaterial", blankToNull(request.mainMaterial()));
             recipeMapper.insertRecipe(recipeParam);
             Long recipeNo = ((Number) recipeParam.get("recipeNo")).longValue();
 
@@ -200,11 +208,19 @@ public class RecipeService {
 
     // 상세 조회 — 집계 조회이므로 다중 쿼리(recipe ⨝ member / 재료 / 조리 단계) 결과를 조립.
     // 인증 없음. data = { recipe, materials, steps }
-    @Transactional(readOnly = true)
+    // 조회 1회당 VIEW_COUNT +1 (그래서 readOnly 아님). 404 확인 후 카운트, 카운트 실패는 삼킴(조회는 성공).
+    @Transactional
     public RecipeDetailResponse getRecipe(Long recipeNo) {
         RecipeDetailItem recipe = recipeMapper.getRecipeDetail(recipeNo);
         if (recipe == null) {
             throw new CustomException(ErrorCode.RECIPE_NOT_FOUND);
+        }
+
+        // 조회수 +1. 실패해도(락 타임아웃·데드락 등) 조회는 진행 — MyBatis 라 catch 후 tx 정상 커밋.
+        try {
+            recipeMapper.increaseViewCount(recipeNo);
+        } catch (RuntimeException e) {
+            log.warn("viewCount 증가 실패 recipeNo={}", recipeNo, e);
         }
 
         // isBookmarked 는 현재 매퍼가 false(0) 고정으로 내려준다.
@@ -276,6 +292,14 @@ public class RecipeService {
                     .recipeInfo(request.recipeInfo())
                     .recipeMainImg(mainImgName)      // RECIPE_MAIN_IMG  = 원본 파일명
                     .recipesImgPath(mainImgUrl)      // RECIPES_IMG_PATH = S3 버킷 URL
+                    .cookingMethod(request.cookingMethod())
+                    .recipeType(request.recipeType())
+                    .calorie(request.calorie())              // PATCH = 전체 교체: 안 보낸 선택 필드는 null 로 덮음
+                    .carbohydrate(request.carbohydrate())
+                    .protein(request.protein())
+                    .fat(request.fat())
+                    .sodium(request.sodium())
+                    .mainMaterial(blankToNull(request.mainMaterial()))
                     .build());
 
             // 3. 재료 — 최종 상태 기반 갱신 (이미지 없어 단순)
@@ -423,6 +447,11 @@ public class RecipeService {
     // null 을 뺀 id 집합
     private Set<Long> collectIds(Stream<Long> ids) {
         return ids.filter(Objects::nonNull).collect(Collectors.toSet());
+    }
+
+    // 선택 문자열 필드(mainMaterial 등) 정규화: null / 공백뿐 → null, 그 외 trim
+    private String blankToNull(String value) {
+        return (value == null || value.isBlank()) ? null : value.trim();
     }
 
     // S3 버킷 URL 이 있으면 버킷 키로 바꿔 목록에 추가

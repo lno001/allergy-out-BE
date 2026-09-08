@@ -73,6 +73,9 @@ class RecipeServiceTest {
         return new RecipeCreateRequest(
                 "된장국",
                 "나트륨을 줄인 된장국",
+                "끓이기", "국&찌개",                  // cookingMethod, recipeType (6값)
+                120.5, 10.0, 8.0, 3.0, 400.0,       // calorie, carbohydrate, protein, fat, sodium
+                "두부",                              // mainMaterial
                 List.of(new MaterialCreateRequest("두부", "20g")),
                 steps);
     }
@@ -340,7 +343,11 @@ class RecipeServiceTest {
         return new RecipeDetailItem(5L, 7L, "된장국", "나트륨 줄인 된장국",             // recipeNo, memberNo(작성자)
                 "main.jpg",                                                         // RECIPE_MAIN_IMG  (원본명)
                 "https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/7/main.jpg", // RECIPES_IMG_PATH (URL)
-                "관리자", LocalDate.of(2026, 8, 21), false);
+                "관리자", LocalDate.of(2026, 8, 21),
+                "끓이기", "국&찌개",                                                  // cookingMethod, recipeType
+                120.5, 10.0, 8.0, 3.0, 400.0,                                       // calorie~sodium
+                "두부", 34L,                                                         // mainMaterial, viewCount
+                false);
     }
 
     // 정상: recipe + materials + steps 를 매퍼 3개에서 받아 조립. steps 는 매퍼 정렬 순서 유지.
@@ -362,7 +369,12 @@ class RecipeServiceTest {
         assertThat(res.recipe().memberNo()).isEqualTo(7L);                 // 작성자 PK
         assertThat(res.recipe().recipeMainImg()).isEqualTo("main.jpg");    // RECIPE_MAIN_IMG (원본명)
         assertThat(res.recipe().recipesImgPath()).startsWith("https://");  // RECIPES_IMG_PATH (버킷 URL)
+        assertThat(res.recipe().cookingMethod()).isEqualTo("끓이기");
+        assertThat(res.recipe().recipeType()).isEqualTo("국&찌개");
+        assertThat(res.recipe().calorie()).isEqualTo(120.5);
+        assertThat(res.recipe().viewCount()).isEqualTo(34L);
         assertThat(res.recipe().isBookmarked()).isFalse();                 // 미구현 → false
+        verify(recipeMapper).increaseViewCount(5L);                        // 조회수 +1
         assertThat(res.materials()).extracting(m -> m.materialName()).containsExactly("두부", "감자");
         assertThat(res.steps()).hasSize(2);
         assertThat(res.steps().get(0).stepImg()).isEqualTo("s1.jpg");      // STEP_IMG (원본명)
@@ -383,8 +395,22 @@ class RecipeServiceTest {
                 .isInstanceOfSatisfying(CustomException.class,
                         ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.RECIPE_NOT_FOUND));
 
+        verify(recipeMapper, never()).increaseViewCount(anyLong());   // 없는 레시피엔 조회수 안 올림
         verify(recipeMapper, never()).getMaterialsByRecipeNo(anyLong());
         verify(recipeMapper, never()).getStepsByRecipeNo(anyLong());
+    }
+
+    // 조회수 UPDATE 가 터져도 catch 로 삼켜서 상세 조회는 정상 반환
+    @Test
+    @DisplayName("상세 조회: viewCount 증가 실패해도 조회는 성공")
+    void getRecipe_viewCountFailure_stillReturns() {
+        when(recipeMapper.getRecipeDetail(5L)).thenReturn(detailRow());
+        doThrow(new RuntimeException("락 타임아웃")).when(recipeMapper).increaseViewCount(5L);
+
+        RecipeDetailResponse res = recipeService.getRecipe(5L);
+
+        assertThat(res.recipe().recipeNo()).isEqualTo(5L);   // 예외 없이 반환됨
+        verify(recipeMapper).getMaterialsByRecipeNo(5L);     // 뒤 조립도 계속 진행
     }
 
     // ---- 레시피 수정 (updateRecipe) ----
@@ -392,7 +418,11 @@ class RecipeServiceTest {
     private static final long RID = 5L;
 
     private RecipeUpdateRequest updateRequest(List<MaterialUpdateRequest> materials, List<StepUpdateRequest> steps) {
-        return new RecipeUpdateRequest("김치찌개", "묵은지로 끓인 김치찌개", materials, steps);
+        return new RecipeUpdateRequest("김치찌개", "묵은지로 끓인 김치찌개",
+                "끓이기", "국&찌개",                  // cookingMethod, recipeType
+                150.0, 12.0, 9.0, 4.0, 500.0,       // calorie~sodium
+                "묵은지",                            // mainMaterial
+                materials, steps);
     }
 
     private MaterialUpdateRequest mat(Long no, String name, String amount) {

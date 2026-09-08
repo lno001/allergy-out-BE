@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +25,9 @@ public class AllergyService {
 
     private static final int MATERIAL_NAME_MAX_LENGTH = 30; // MEMBER_ALLERGY.MATERIAL_NAME NV(30)
     private static final int ALLERGY_LIST_MAX_SIZE = 200; // 회원 1명당 등록 가능한 알러지 항목 최대 개수
+    // 한글/영문/숫자/공백과 실제 재료명에 쓰이는 구두점(· - ( ))만 허용 — 이모지 등 이상한
+    // 문자가 재료명으로 저장되는 걸 막는다. 프론트(useAllergyProfile.addCustom)와 동일 규칙.
+    private static final Pattern ALLOWED_MATERIAL_NAME = Pattern.compile("^[가-힣a-zA-Z0-9\\s·\\-()]+$");
 
     private final AllergyMapper allergyMapper;
     private final MemberMapper memberMapper; // 회원 존재 확인용 - member 담당 조회 메소드 재사용
@@ -64,6 +68,8 @@ public class AllergyService {
             String field = "allergyList[" + i + "]";
             if (materialName == null || materialName.isBlank()) {
                 details.put(field, "알러지 항목은 비어있을 수 없습니다.");
+            } else if (!ALLOWED_MATERIAL_NAME.matcher(materialName).matches()) {
+                details.put(field, "재료명은 한글, 영문, 숫자, 공백, · - ( ) 만 사용할 수 있습니다.");
             } else if (materialName.length() > MATERIAL_NAME_MAX_LENGTH) {
                 details.put(field, "알러지 항목은 각각 30자 이내로 입력해주세요.");
             } else if (!seen.add(materialName)) {

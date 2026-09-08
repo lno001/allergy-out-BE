@@ -2,27 +2,43 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.allergyout.recipe.model.dao.RecipeMapper">
 
-    <!-- PK·CREATE_DATE는 INSERT 컬럼에 넣지 않음 (IDENTITY / DB default). 생성된 RECIPE_NO는 recipeNo로 되받음 -->
-    <!-- useGeneratedKeys: -->
+    <!-- PK·CREATE_DATE·VIEW_COUNT 는 INSERT 컬럼에 안 넣음 (IDENTITY / DB default SYSDATE / DEFAULT 0).
+         생성된 RECIPE_NO 는 recipeNo 로 되받음. 영양성분(CALORIE~SODIUM)·MAIN_MATERIAL 은 null 가능. -->
     <insert id="insertRecipe" parameterType="map"
             useGeneratedKeys="true" keyProperty="recipeNo" keyColumn="RECIPE_NO">
-        INSERT 
-          INTO 
-          		RECIPES 
+        INSERT
+          INTO
+          		RECIPES
           		(
             	MEMBER_NO
              ,  RECIPE_TITLE
              ,  RECIPE_INFO
              ,  RECIPE_MAIN_IMG
              ,  RECIPES_IMG_PATH
-                ) 
-        VALUES 
+             ,  COOKING_METHOD
+             ,  RECIPE_TYPE
+             ,  CALORIE
+             ,  CARBOHYDRATE
+             ,  PROTEIN
+             ,  FAT
+             ,  SODIUM
+             ,  MAIN_MATERIAL
+                )
+        VALUES
         		(
             	#{memberNo}
              ,  #{recipeTitle}
              ,  #{recipeInfo}
              ,  #{recipeMainImg}
              ,  #{recipesImgPath}
+             ,  #{cookingMethod}
+             ,  #{recipeType}
+             ,  #{calorie}
+             ,  #{carbohydrate}
+             ,  #{protein}
+             ,  #{fat}
+             ,  #{sodium}
+             ,  #{mainMaterial}
              	)
     </insert>
 
@@ -379,6 +395,15 @@
             ,  r.RECIPES_IMG_PATH
             ,  m.MEMBER_NAME
             ,  r.CREATE_DATE
+            ,  r.COOKING_METHOD
+            ,  r.RECIPE_TYPE
+            ,  r.CALORIE
+            ,  r.CARBOHYDRATE
+            ,  r.PROTEIN
+            ,  r.FAT
+            ,  r.SODIUM
+            ,  r.MAIN_MATERIAL
+            ,  r.VIEW_COUNT
             ,  0 AS IS_BOOKMARKED
           FROM
                RECIPES r
@@ -389,6 +414,18 @@
                r.RECIPE_NO = #{recipeNo}
            AND r.DEL_YN    = 'N'
     </select>
+
+    <!-- 상세 조회 1회당 +1. Service 에서 404 확인 후 호출하고, 실패는 try/catch 로 삼킨다(조회는 성공시킴).
+         중복 방지·본인 조회 제외 없음 (새로고침마다 오름). -->
+    <update id="increaseViewCount">
+        UPDATE
+               RECIPES
+           SET
+               VIEW_COUNT = VIEW_COUNT + 1
+         WHERE
+               RECIPE_NO = #{recipeNo}
+           AND DEL_YN    = 'N'
+    </update>
 
     <!-- 재료 목록 -->
     <select id="getMaterialsByRecipeNo" resultType="com.allergyout.recipe.model.vo.Material">
@@ -456,6 +493,14 @@
             ,  RECIPE_INFO      = #{recipeInfo}
             ,  RECIPE_MAIN_IMG  = #{recipeMainImg}
             ,  RECIPES_IMG_PATH = #{recipesImgPath}
+            ,  COOKING_METHOD   = #{cookingMethod}
+            ,  RECIPE_TYPE      = #{recipeType}
+            ,  CALORIE          = #{calorie}
+            ,  CARBOHYDRATE     = #{carbohydrate}
+            ,  PROTEIN          = #{protein}
+            ,  FAT              = #{fat}
+            ,  SODIUM           = #{sodium}
+            ,  MAIN_MATERIAL    = #{mainMaterial}
          WHERE
                RECIPE_NO = #{recipeNo}
            AND MEMBER_NO = #{memberNo}

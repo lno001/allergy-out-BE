@@ -55,7 +55,10 @@ import com.allergyout.s3.S3Service;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @TestPropertySource(properties = {
         "DB_USERNAME=test", "DB_PASSWORD=test",
-        "S3ACESSKEY=test", "S3SECRETKEY=test"
+        "S3ACESSKEY=test", "S3SECRETKEY=test",
+        // AesUtil/HmacUtil(회원 email/phone 암호화, 다른 팀 작업)이 32바이트 base64 키를 요구 — 컨텍스트 로드용 더미
+        "AES_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+        "HMAC_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 })
 class RecipeApiServerTest {
 
@@ -98,6 +101,10 @@ class RecipeApiServerTest {
         MultipartBodyBuilder b = new MultipartBodyBuilder();
         b.part("recipeTitle", "된장국");
         b.part("recipeInfo", "나트륨을 줄인 된장국");
+        b.part("cookingMethod", "끓이기");
+        b.part("recipeType", "국&찌개");
+        b.part("calorie", "120.5");
+        b.part("mainMaterial", "두부");
         b.part("recipeMainImg", file("main.jpg")).contentType(MediaType.IMAGE_JPEG);
         b.part("materialList[0].materialName", "두부");
         b.part("materialList[0].amount", "20g(2×2×2cm)");
@@ -295,7 +302,9 @@ class RecipeApiServerTest {
                 5L, 7L, "된장국", "나트륨 줄인 된장국",                                  // recipeNo, memberNo(작성자)
                 "main.jpg",                                                          // RECIPE_MAIN_IMG  (원본명)
                 "https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/7/main.jpg",  // RECIPES_IMG_PATH (URL)
-                "관리자", LocalDate.of(2026, 8, 21), false));
+                "관리자", LocalDate.of(2026, 8, 21),
+                "끓이기", "국&찌개", 120.5, 10.0, 8.0, 3.0, 400.0, "두부", 34L,          // cookingMethod~viewCount
+                false));
         when(recipeMapper.getMaterialsByRecipeNo(5L)).thenReturn(List.of(
                 Material.builder().materialNo(1L).recipeNo(5L).materialName("두부").amount("20g").build()));
         when(recipeMapper.getStepsByRecipeNo(5L)).thenReturn(List.of(
@@ -312,11 +321,16 @@ class RecipeApiServerTest {
                 .contains("\"memberNo\":7")   // 작성자 PK
                 .contains("\"recipeMainImg\":\"main.jpg\"")
                 .contains("\"recipesImgPath\":\"https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/7/main.jpg\"")
+                .contains("\"cookingMethod\":\"끓이기\"")
+                .contains("\"recipeType\":\"국&찌개\"")
+                .contains("\"calorie\":120.5")
+                .contains("\"viewCount\":34")
                 .contains("\"isBookmarked\":false")
                 .contains("\"materialName\":\"두부\"")
                 .contains("\"stepOrder\":1")
                 .contains("\"stepImg\":\"s1.jpg\"")
                 .contains("\"stepImgPath\":\"https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/steps/5/s1.jpg\"");
+        Mockito.verify(recipeMapper).increaseViewCount(5L);   // 조회수 +1
     }
 
     // 없는 레시피 → 404 + 명세서 문구
@@ -347,6 +361,8 @@ class RecipeApiServerTest {
         MultipartBodyBuilder b = new MultipartBodyBuilder();
         b.part("recipeTitle", "김치찌개");
         b.part("recipeInfo", "묵은지로 끓인 김치찌개");
+        b.part("cookingMethod", "끓이기");
+        b.part("recipeType", "국&찌개");
         b.part("materialList[0].materialName", "묵은지");   // materialNo 없음 → 신규
         b.part("materialList[0].amount", "250g");
         b.part("stepList[0].stepOrder", "1");
