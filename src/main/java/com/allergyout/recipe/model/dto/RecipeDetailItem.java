@@ -17,6 +17,15 @@ public record RecipeDetailItem(
         String recipesImgPath, // RECIPES_IMG_PATH (S3 버킷 URL)
         String memberName,    // MEMBER.MEMBER_NAME (작성자)
         LocalDate createDate, // CREATE_DATE (yyyy-MM-dd)
+        String cookingMethod, // COOKING_METHOD (6값)
+        String recipeType,    // RECIPE_TYPE (6값)
+        Double calorie,       // CALORIE  (null 가능, 숫자만 — 단위는 프론트)
+        Double carbohydrate,  // CARBOHYDRATE
+        Double protein,       // PROTEIN
+        Double fat,           // FAT
+        Double sodium,        // SODIUM
+        String mainMaterial,  // MAIN_MATERIAL (null 가능)
+        Long viewCount,       // VIEW_COUNT (조회수)
 
         @JsonProperty("isBookmarked") // is 접두사 프로퍼티명 그대로 직렬화 (명세서 필드명 = isBookmarked)
         boolean isBookmarked  // 로그인 회원의 즐겨찾기 여부 (미구현 → false 고정)

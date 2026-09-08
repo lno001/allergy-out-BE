@@ -71,6 +71,9 @@ public interface RecipeMapper {
     // RECIPES ⨝ MEMBER, DEL_YN='N'. 없으면 null.
     RecipeDetailItem getRecipeDetail(long recipeNo);
 
+    // 상세 조회 1회당 VIEW_COUNT + 1 (Service 가 404 확인 후 try/catch 로 호출)
+    void increaseViewCount(long recipeNo);
+
     List<Material> getMaterialsByRecipeNo(long recipeNo);
 
     List<RecipeStep> getStepsByRecipeNo(long recipeNo);
