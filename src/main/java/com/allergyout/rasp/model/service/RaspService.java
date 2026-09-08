@@ -10,6 +10,7 @@ import com.allergyout.global.exception.CustomException;
 import com.allergyout.global.exception.ErrorCode;
 import com.allergyout.rasp.model.dao.RaspMapper;
 import com.allergyout.rasp.model.dto.DeviceResponse;
+import com.allergyout.rasp.model.dto.StepLogCreateRequest;
 
 import lombok.RequiredArgsConstructor;
 
@@ -44,5 +45,15 @@ public class RaspService {
             throw new CustomException(ErrorCode.DEVICE_NOT_FOUND);
         }
         return new DeviceResponse(deviceNo);
+    }
+
+    // 라즈베리파이가 보고한 그날 누적 걸음. 보고마다 새 행 INSERT (UPDATE 안 함).
+    // deviceNo 는 요청 body 값이라(permitAll) 존재 검증 먼저 — 없으면 404.
+    @Transactional
+    public void createStepLog(StepLogCreateRequest request) {
+        if (!raspMapper.existsByDeviceNo(request.deviceNo())) {
+            throw new CustomException(ErrorCode.DEVICE_NOT_FOUND);
+        }
+        raspMapper.insertStepLog(request.deviceNo(), request.todaySteps());
     }
 }

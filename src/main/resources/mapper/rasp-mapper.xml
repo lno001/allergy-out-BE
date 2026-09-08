@@ -16,4 +16,16 @@
          WHERE MEMBER_NO = #{memberNo}
     </select>
 
+    <select id="existsByDeviceNo" resultType="boolean">
+        SELECT CASE WHEN COUNT(*) > 0 THEN 1 ELSE 0 END
+          FROM DEVICE
+         WHERE DEVICE_NO = #{deviceNo}
+    </select>
+
+    <!-- 보고마다 새 행. PK(STEP_LOG_NO)·CREATE_DATE 는 INSERT 컬럼에 넣지 않음 -->
+    <insert id="insertStepLog">
+        INSERT INTO STEP_LOG (DEVICE_NO, TODAY_STEPS)
+        VALUES (#{deviceNo}, #{todaySteps})
+    </insert>
+
 </mapper>

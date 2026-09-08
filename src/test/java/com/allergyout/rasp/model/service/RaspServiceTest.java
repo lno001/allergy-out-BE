@@ -2,6 +2,7 @@ package com.allergyout.rasp.model.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
@@ -21,6 +22,7 @@ import com.allergyout.global.exception.CustomException;
 import com.allergyout.global.exception.ErrorCode;
 import com.allergyout.rasp.model.dao.RaspMapper;
 import com.allergyout.rasp.model.dto.DeviceResponse;
+import com.allergyout.rasp.model.dto.StepLogCreateRequest;
 
 @ExtendWith(MockitoExtension.class)
 class RaspServiceTest {
@@ -79,5 +81,36 @@ class RaspServiceTest {
         assertThatThrownBy(() -> raspService.getDevice(MEMBER_NO))
                 .isInstanceOfSatisfying(CustomException.class,
                         ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.DEVICE_NOT_FOUND));
+    }
+
+    @Test
+    @DisplayName("걸음 저장: 디바이스가 존재하면 INSERT 한다")
+    void createStepLog_success() {
+        when(raspMapper.existsByDeviceNo(7L)).thenReturn(true);
+
+        raspService.createStepLog(new StepLogCreateRequest(7L, 5234));
+
+        verify(raspMapper).insertStepLog(7L, 5234);
+    }
+
+    @Test
+    @DisplayName("걸음 저장: 없는 deviceNo 면 DEVICE_NOT_FOUND, INSERT 미호출")
+    void createStepLog_deviceNotFound() {
+        when(raspMapper.existsByDeviceNo(99L)).thenReturn(false);
+
+        assertThatThrownBy(() -> raspService.createStepLog(new StepLogCreateRequest(99L, 5234)))
+                .isInstanceOfSatisfying(CustomException.class,
+                        ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.DEVICE_NOT_FOUND));
+        verify(raspMapper, never()).insertStepLog(any(), any());
+    }
+
+    @Test
+    @DisplayName("걸음 저장: todaySteps 0 도 정상 저장 (경계)")
+    void createStepLog_zeroSteps() {
+        when(raspMapper.existsByDeviceNo(7L)).thenReturn(true);
+
+        raspService.createStepLog(new StepLogCreateRequest(7L, 0));
+
+        verify(raspMapper).insertStepLog(7L, 0);
     }
 }

@@ -3,6 +3,7 @@ package com.allergyout.rasp.model.dao;
 import java.util.Map;
 
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
 
 @Mapper
 public interface RaspMapper {
@@ -13,4 +14,11 @@ public interface RaspMapper {
 
     // 그 회원의 디바이스 번호 (1회원 1디바이스). 없으면 null — 멱등 등록 판정용.
     Long getDeviceNoByMemberNo(Long memberNo);
+
+    // 걸음 저장 전 deviceNo 존재 검증용 (요청 body 값이라 신뢰 못 함).
+    boolean existsByDeviceNo(Long deviceNo);
+
+    // 보고마다 새 행 INSERT (UPDATE 안 함). PK·CREATE_DATE 는 IDENTITY / DB default.
+    void insertStepLog(@Param("deviceNo") Long deviceNo,
+                       @Param("todaySteps") Integer todaySteps);
 }

@@ -5,14 +5,17 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.allergyout.global.common.ApiResponse;
 import com.allergyout.global.security.CustomUserDetails;
 import com.allergyout.rasp.model.dto.DeviceResponse;
+import com.allergyout.rasp.model.dto.StepLogCreateRequest;
 import com.allergyout.rasp.model.service.RaspService;
 
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
 @RestController
@@ -38,5 +41,15 @@ public class RaspController {
             @AuthenticationPrincipal CustomUserDetails user) {
         DeviceResponse data = raspService.getDevice(user.getMemberNo());
         return ResponseEntity.ok(ApiResponse.success("디바이스를 조회했습니다.", data));
+    }
+
+    // POST /api/rasp/steps — 인증 없음(permitAll). 라즈베리파이가 주기적으로 호출.
+    // body: { "deviceNo": 1, "todaySteps": 5234 }. 없는 deviceNo 면 404, 형식 위반이면 400.
+    @PostMapping("/steps")
+    public ResponseEntity<ApiResponse<Void>> createStepLog(
+            @Valid @RequestBody StepLogCreateRequest request) {
+        raspService.createStepLog(request);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.created("걸음 수를 저장했습니다.", null));
     }
 }
