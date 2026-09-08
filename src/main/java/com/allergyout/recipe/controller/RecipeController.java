@@ -49,22 +49,6 @@ public class RecipeController {
         return ResponseEntity.ok(ApiResponse.success("레시피 목록 조회 성공했습니다.", data));
     }
 
-    // GET /api/recipes/filter — @Deprecated. 목록이 GET /api/recipes 로 통합됐다.
-    //  프론트가 getFilteredRecipes 호출을 걷어내기 전까지만 유지하는 alias — 동작은 GET /api/recipes 와 완전히 동일
-    //  (같은 서비스 메서드 호출). 프론트 전환 PR 머지되면 별도 후속 PR 로 이 메서드를 제거한다.
-    //  /{recipeNo}(상세)보다 리터럴 "/filter" 가 우선 매칭.
-    @Deprecated
-    @GetMapping("/filter")
-    public ResponseEntity<ApiResponse<RecipeListResponse>> getFilteredRecipeList(
-            @Valid @ModelAttribute RecipeListQuery query,
-            @AuthenticationPrincipal CustomUserDetails userDetails) {
-
-        Long memberNo = (userDetails != null) ? userDetails.getMemberNo() : null;
-        RecipeListResponse data = recipeService.getRecipeList(query, memberNo);
-
-        return ResponseEntity.ok(ApiResponse.success("레시피 목록 조회 성공했습니다.", data));
-    }
-
     // GET /api/recipes/{recipeNo} — 인증 없음. 레시피 1건 상세 (recipe + 재료 + 조리 단계).
     // recipeNo 가 숫자가 아니면 MethodArgumentTypeMismatchException → GlobalExceptionHandler 가 400.
     @GetMapping("/{recipeNo}")

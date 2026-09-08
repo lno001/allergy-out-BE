@@ -291,41 +291,18 @@ class RecipeApiServerTest {
                 .getRecipeList(anyInt(), anyInt(), any(), any(), any(), any(), any(), anyString());
     }
 
-    // 필터 end-to-end: GET /api/recipes/filter → @Deprecated alias 는 통합 목록 매퍼로 라우팅 (동작 동일).
-    // 인증 없이 호출 → memberNo null. excludeMaterials 는 반복 파라미터.
+    // /filter 제거됨 : GET /api/recipes/filter 는 이제 /{recipeNo} 로 매칭되고 "filter"→Long 변환 실패 → 400
     @Test
-    @DisplayName("실서버 GET /api/recipes/filter?keyword=된장&excludeMaterials=계란&excludeMaterials=우유 → 200 (alias)")
-    void getFilteredRecipeList_aliasRoutesToUnified() {
-        when(recipeMapper.getRecipeList(0, 20, null, "된장", List.of("계란", "우유"), null, null, "latest"))
-                .thenReturn(List.of(new RecipeListItem(101L, "된장국", "doenjang.jpg",
-                        "https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/1/101.jpg",
-                        "관리자", LocalDate.of(2026, 8, 21),
-                        "국&찌개", "끓이기", 120.5, "두부", 5L)));
-        when(recipeMapper.countRecipeList(null, "된장", List.of("계란", "우유"), null, null)).thenReturn(1);
-
-        String body = client.get().uri("/api/recipes/filter?keyword=된장&excludeMaterials=계란&excludeMaterials=우유")
-                .retrieve()
-                .body(String.class);
-
-        assertThat(body)
-                .contains("\"code\":200")
-                .contains("레시피 목록 조회 성공했습니다.")
-                .contains("\"recipeNo\":101")
-                .contains("\"totalElements\":1");
-    }
-
-    // 필터 라우팅: /filter 가 /{recipeNo}(상세) 로 안 새는지 — "filter" 를 recipeNo 로 안 파싱해야 함
-    @Test
-    @DisplayName("실서버 GET /api/recipes/filter (조건 없음) → 200, 상세 조회로 안 샘")
-    void getFilteredRecipeList_noParams_routesToFilter() {
-        when(recipeMapper.getRecipeList(0, 20, null, null, null, null, null, "latest")).thenReturn(List.of());
-        when(recipeMapper.countRecipeList(null, null, null, null, null)).thenReturn(0);
-
-        var res = client.get().uri("/api/recipes/filter").retrieve().toEntity(String.class);
-
-        assertThat(res.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(res.getBody()).contains("\"recipes\":[]").contains("\"totalElements\":0");
+    @DisplayName("실서버 GET /api/recipes/filter → 400 (엔드포인트 제거됨, recipeNo 로 파싱 실패)")
+    void getRecipesFilter_removed_returns400() {
+        try {
+            client.get().uri("/api/recipes/filter").retrieve().toBodilessEntity();
+        } catch (RestClientResponseException e) {
+            assertThat(e.getStatusCode().value()).isEqualTo(400);
+        }
         Mockito.verify(recipeMapper, Mockito.never()).getRecipeDetail(anyLong());
+        Mockito.verify(recipeMapper, Mockito.never())
+                .getRecipeList(anyInt(), anyInt(), any(), any(), any(), any(), any(), anyString());
     }
 
     // 상세 조회 end-to-end: GET /api/recipes/{id} → 200, data.recipe/materials/steps.
