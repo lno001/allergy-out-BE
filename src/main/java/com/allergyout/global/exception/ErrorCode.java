@@ -24,6 +24,7 @@ public enum ErrorCode {
     MEMBER_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 회원입니다."),
     RECIPE_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 레시피입니다."),
     BOOKMARK_NOT_FOUND(HttpStatus.NOT_FOUND, "즐겨찾기하지 않은 레시피입니다."),
+    DEVICE_NOT_FOUND(HttpStatus.NOT_FOUND, "등록되지 않은 디바이스입니다."),
     ALREADY_BOOKMARKED(HttpStatus.CONFLICT, "이미 즐겨찾기한 레시피입니다."),   // 관계 중복 (UNIQUE 값 충돌 아님 → DUPLICATE_VALUE 와 별개)
     UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다."),
     REFRESH_EXPIRED(HttpStatus.UNAUTHORIZED, "로그인이 만료되었습니다."),
