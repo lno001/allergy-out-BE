@@ -1,6 +1,7 @@
 package com.allergyout.rasp.model.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
@@ -16,6 +17,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import com.allergyout.global.exception.CustomException;
+import com.allergyout.global.exception.ErrorCode;
 import com.allergyout.rasp.model.dao.RaspMapper;
 import com.allergyout.rasp.model.dto.DeviceResponse;
 
@@ -56,5 +59,25 @@ class RaspServiceTest {
 
         assertThat(res.deviceNo()).isEqualTo(9L);
         verify(raspMapper, never()).insertDevice(anyMap());
+    }
+
+    @Test
+    @DisplayName("조회: 등록돼 있으면 deviceNo 를 반환한다")
+    void getDevice_found() {
+        when(raspMapper.getDeviceNoByMemberNo(MEMBER_NO)).thenReturn(7L);
+
+        DeviceResponse res = raspService.getDevice(MEMBER_NO);
+
+        assertThat(res.deviceNo()).isEqualTo(7L);
+    }
+
+    @Test
+    @DisplayName("조회: 미등록이면 DEVICE_NOT_FOUND")
+    void getDevice_notRegistered() {
+        when(raspMapper.getDeviceNoByMemberNo(MEMBER_NO)).thenReturn(null);
+
+        assertThatThrownBy(() -> raspService.getDevice(MEMBER_NO))
+                .isInstanceOfSatisfying(CustomException.class,
+                        ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.DEVICE_NOT_FOUND));
     }
 }

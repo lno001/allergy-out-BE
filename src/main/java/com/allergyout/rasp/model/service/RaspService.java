@@ -35,4 +35,14 @@ public class RaspService {
         // DataIntegrityViolationException 핸들러가 없어 현재는 500 으로 나가지만, 사람이 1회 호출하는
         // 프로비저닝 시나리오라 감수한다. (막으려면 GlobalExceptionHandler 에 핸들러 추가 — 공용 코드 승인 필요)
     }
+
+    // 내 라즈베리파이 번호 조회. 등록 안 했으면 404 (걸음 0건과 구분 — 프론트가 "먼저 등록해 주세요" 안내).
+    @Transactional(readOnly = true)
+    public DeviceResponse getDevice(Long memberNo) {
+        Long deviceNo = raspMapper.getDeviceNoByMemberNo(memberNo);
+        if (deviceNo == null) {
+            throw new CustomException(ErrorCode.DEVICE_NOT_FOUND);
+        }
+        return new DeviceResponse(deviceNo);
+    }
 }
