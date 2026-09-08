@@ -5,6 +5,8 @@ import java.util.List;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 
 // PATCH /api/recipes/{recipeNo} 의 multipart/form-data 폼 필드를 @ModelAttribute 로 바인딩.
@@ -20,6 +22,33 @@ public record RecipeUpdateRequest(
         @NotBlank
         @Size(max = 1000) // RECIPES.RECIPE_INFO NVARCHAR2(1000)
         String recipeInfo,
+
+        @NotBlank
+        @Pattern(regexp = "굽기|튀기기|볶기|찌기|끓이기|기타") // RECIPES.COOKING_METHOD NVARCHAR2(20) — 6값 고정
+        String cookingMethod,
+
+        @NotBlank
+        @Pattern(regexp = "밥|국&찌개|반찬|일품|후식|기타")   // RECIPES.RECIPE_TYPE NVARCHAR2(20) — 6값 고정
+        String recipeType,
+
+        // PATCH 는 "폼 전체 = 최종 상태" — 안 보낸 선택 필드는 null 로 덮어써진다 (프론트가 기존 값 채워서 항상 전송)
+        @PositiveOrZero // RECIPES.CALORIE NUMBER
+        Double calorie,
+
+        @PositiveOrZero // RECIPES.CARBOHYDRATE NUMBER
+        Double carbohydrate,
+
+        @PositiveOrZero // RECIPES.PROTEIN NUMBER
+        Double protein,
+
+        @PositiveOrZero // RECIPES.FAT NUMBER
+        Double fat,
+
+        @PositiveOrZero // RECIPES.SODIUM NUMBER
+        Double sodium,
+
+        @Size(max = 20) // RECIPES.MAIN_MATERIAL NVARCHAR2(20) — 메인 재료 1개
+        String mainMaterial,
 
         @NotEmpty
         @Size(max = 20)   // 재료 최대 20개 (명세서 추가사항)
