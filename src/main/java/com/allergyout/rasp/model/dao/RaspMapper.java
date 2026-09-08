@@ -30,5 +30,5 @@ public interface RaspMapper {
     List<TodayStepPoint> getTodayStepPoints(Long deviceNo);
 
     // 오늘 포함 7일간 일자별 MAX(TODAY_STEPS). 데이터 없는 날은 행 없음.
-    List<DailyStepCount> getDailyStepCounts(Long deviceNo);
+    List<DailyStepCount> getWeeklyStepCounts(Long deviceNo);
 }

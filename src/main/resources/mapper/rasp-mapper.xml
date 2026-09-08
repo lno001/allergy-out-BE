@@ -39,7 +39,7 @@
     </select>
 
     <!-- 오늘 포함 7일. 하루 총 걸음 = 그날 MAX(TODAY_STEPS). 데이터 없는 날은 행 자체가 없음. -->
-    <select id="getDailyStepCounts" resultType="DailyStepCount">
+    <select id="getWeeklyStepCounts" resultType="DailyStepCount">
         SELECT TRUNC(CREATE_DATE) AS STEP_DATE
              , MAX(TODAY_STEPS)   AS STEPS
           FROM STEP_LOG

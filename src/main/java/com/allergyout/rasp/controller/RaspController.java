@@ -60,7 +60,7 @@ public class RaspController {
     public ResponseEntity<ApiResponse<TodayStepListResponse>> getTodaySteps(
             @AuthenticationPrincipal CustomUserDetails user) {
         TodayStepListResponse data = raspService.getTodaySteps(user.getMemberNo());
-        return ResponseEntity.ok(ApiResponse.success("걸음 수를 조회했습니다.", data));
+        return ResponseEntity.ok(ApiResponse.success("오늘 걸음 수를 조회했습니다.", data));
     }
 
     // GET /api/rasp/steps/week — 인증 필요. 지난 7일(오늘 포함) 일자별 총 걸음. 미등록이면 404.
@@ -68,6 +68,6 @@ public class RaspController {
     public ResponseEntity<ApiResponse<WeeklyStepListResponse>> getWeekSteps(
             @AuthenticationPrincipal CustomUserDetails user) {
         WeeklyStepListResponse data = raspService.getWeekSteps(user.getMemberNo());
-        return ResponseEntity.ok(ApiResponse.success("걸음 수를 조회했습니다.", data));
+        return ResponseEntity.ok(ApiResponse.success("주간 걸음 수를 조회했습니다.", data));
     }
 }

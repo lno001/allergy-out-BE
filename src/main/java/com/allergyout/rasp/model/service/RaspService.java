@@ -66,7 +66,7 @@ public class RaspService {
     @Transactional(readOnly = true)
     public WeeklyStepListResponse getWeekSteps(Long memberNo) {
         Long deviceNo = getDeviceNoOrThrow(memberNo);
-        return WeeklyStepListResponse.of(deviceNo, raspMapper.getDailyStepCounts(deviceNo));
+        return WeeklyStepListResponse.of(deviceNo, raspMapper.getWeeklyStepCounts(deviceNo));
     }
 
     // memberNo 의 deviceNo. 미등록이면 DEVICE_NOT_FOUND (device 조회·걸음 조회 공통 규칙).

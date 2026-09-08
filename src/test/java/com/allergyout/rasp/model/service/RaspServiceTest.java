@@ -164,7 +164,7 @@ class RaspServiceTest {
     @DisplayName("주간 조회: 등록돼 있으면 deviceNo + 일자별 목록을 조립해 반환한다")
     void getWeekSteps_success() {
         when(raspMapper.getDeviceNoByMemberNo(MEMBER_NO)).thenReturn(7L);
-        when(raspMapper.getDailyStepCounts(7L)).thenReturn(List.of(
+        when(raspMapper.getWeeklyStepCounts(7L)).thenReturn(List.of(
                 new DailyStepCount(LocalDate.of(2026, 9, 2), 9210),
                 new DailyStepCount(LocalDate.of(2026, 9, 8), 5234)));
 
@@ -184,6 +184,6 @@ class RaspServiceTest {
         assertThatThrownBy(() -> raspService.getWeekSteps(MEMBER_NO))
                 .isInstanceOfSatisfying(CustomException.class,
                         ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.DEVICE_NOT_FOUND));
-        verify(raspMapper, never()).getDailyStepCounts(any());
+        verify(raspMapper, never()).getWeeklyStepCounts(any());
     }
 }
