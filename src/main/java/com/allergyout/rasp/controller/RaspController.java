@@ -11,10 +11,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.allergyout.global.common.ApiResponse;
 import com.allergyout.global.security.CustomUserDetails;
+import com.allergyout.rasp.model.dto.DayStepResponse;
 import com.allergyout.rasp.model.dto.DeviceResponse;
 import com.allergyout.rasp.model.dto.StepLogCreateRequest;
-import com.allergyout.rasp.model.dto.TodayStepListResponse;
-import com.allergyout.rasp.model.dto.WeeklyStepListResponse;
+import com.allergyout.rasp.model.dto.WeekStepResponse;
 import com.allergyout.rasp.model.service.RaspService;
 
 import jakarta.validation.Valid;
@@ -55,19 +55,19 @@ public class RaspController {
                 .body(ApiResponse.created("걸음 수를 저장했습니다.", null));
     }
 
-    // GET /api/rasp/steps/today — 인증 필요. 오늘 인트라데이 곡선 (자정 리셋). 미등록이면 404.
-    @GetMapping("/steps/today")
-    public ResponseEntity<ApiResponse<TodayStepListResponse>> getTodaySteps(
+    // GET /api/rasp/steps/day — 인증 필요. 오늘 인트라데이 곡선 (자정 리셋). 미등록이면 404.
+    @GetMapping("/steps/day")
+    public ResponseEntity<ApiResponse<DayStepResponse>> getDaySteps(
             @AuthenticationPrincipal CustomUserDetails user) {
-        TodayStepListResponse data = raspService.getTodaySteps(user.getMemberNo());
+        DayStepResponse data = raspService.getDaySteps(user.getMemberNo());
         return ResponseEntity.ok(ApiResponse.success("오늘 걸음 수를 조회했습니다.", data));
     }
 
     // GET /api/rasp/steps/week — 인증 필요. 지난 7일(오늘 포함) 일자별 총 걸음. 미등록이면 404.
     @GetMapping("/steps/week")
-    public ResponseEntity<ApiResponse<WeeklyStepListResponse>> getWeekSteps(
+    public ResponseEntity<ApiResponse<WeekStepResponse>> getWeekSteps(
             @AuthenticationPrincipal CustomUserDetails user) {
-        WeeklyStepListResponse data = raspService.getWeekSteps(user.getMemberNo());
+        WeekStepResponse data = raspService.getWeekSteps(user.getMemberNo());
         return ResponseEntity.ok(ApiResponse.success("주간 걸음 수를 조회했습니다.", data));
     }
 }
