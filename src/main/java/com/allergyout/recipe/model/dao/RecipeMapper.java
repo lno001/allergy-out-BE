@@ -8,6 +8,7 @@ import org.apache.ibatis.annotations.Param;
 
 import com.allergyout.recipe.model.dto.RecipeDetailItem;
 import com.allergyout.recipe.model.dto.RecipeListItem;
+import com.allergyout.recipe.model.dto.RecipeRecommendItem;
 import com.allergyout.recipe.model.vo.Material;
 import com.allergyout.recipe.model.vo.Recipe;
 import com.allergyout.recipe.model.vo.RecipeStep;
@@ -65,6 +66,13 @@ public interface RecipeMapper {
     int countFilteredRecipeList(@Param("memberNo") Long memberNo,
                                 @Param("keyword") String keyword,
                                 @Param("excludeMaterials") List<String> excludeMaterials);
+
+    // ---- 추천 조회 (GET /api/recipes/recommend) : 끼니당 목표 칼로리에 가장 가까운 레시피 top N ----
+    //  RECIPES ⨝ MEMBER, DEL_YN='N', CALORIE IS NOT NULL, 회원 알러지 재료 제외(getFilteredRecipeList 서브쿼리와 동일).
+    //  정렬 |CALORIE - perMeal| 오름차순 → VIEW_COUNT 내림 → CREATE_DATE 오름 → RECIPE_NO 오름 (완전 결정론).
+    List<RecipeRecommendItem> getRecommendedRecipes(@Param("memberNo") long memberNo,
+                                                    @Param("perMeal") double perMeal,
+                                                    @Param("count") int count);
 
     // ---- 상세 조회 : 집계 조회이므로 다중 쿼리 + Service 조립 ----
 

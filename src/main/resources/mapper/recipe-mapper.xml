@@ -379,6 +379,46 @@
     </select>
 
     <!-- ========================================================================
+         추천 조회 (GET /api/recipes/recommend) : 끼니당 목표 칼로리(perMeal) 근접도 상위 N
+         - 회원 알러지 재료 제외 (getFilteredRecipeList 의 서브쿼리와 동일)
+         - CALORIE IS NOT NULL 인 레시피만 후보
+         - |CALORIE - perMeal| 오름차순, 동점은 조회수 많은 순 → 등록 오래된 순 → RECIPE_NO
+         ======================================================================== -->
+    <select id="getRecommendedRecipes" resultType="RecipeRecommendItem">
+        SELECT
+               r.RECIPE_NO
+            ,  r.RECIPE_TITLE
+            ,  r.RECIPES_IMG_PATH
+            ,  m.MEMBER_NAME
+            ,  r.CALORIE
+          FROM
+               RECIPES r
+          JOIN
+               MEMBER  m
+            ON r.MEMBER_NO = m.MEMBER_NO
+         WHERE
+               r.DEL_YN     = 'N'
+           AND r.CALORIE IS NOT NULL
+           AND r.RECIPE_NO NOT IN (
+                   SELECT
+                          mat.RECIPE_NO
+                     FROM
+                          MATERIAL        mat
+                     JOIN
+                          MEMBER_ALLERGY  ma
+                       ON mat.MATERIAL_NAME LIKE '%' || ma.MATERIAL_NAME || '%'
+                    WHERE
+                          ma.MEMBER_NO = #{memberNo}
+               )
+         ORDER BY
+               ABS(r.CALORIE - #{perMeal}) ASC
+            ,  r.VIEW_COUNT                DESC
+            ,  r.CREATE_DATE               ASC
+            ,  r.RECIPE_NO                 ASC
+         FETCH FIRST #{count} ROWS ONLY
+    </select>
+
+    <!-- ========================================================================
          상세 조회 (GET /api/recipes/{recipeNo}) : 다중 쿼리 + Service 조립
          ======================================================================== -->
 
