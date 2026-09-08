@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.allergyout.rasp.model.dao.RaspMapper">
+
+    <!-- PK·CREATE_DATE 는 INSERT 컬럼에 넣지 않음 (IDENTITY / DB default). 생성된 DEVICE_NO 는 deviceNo 로 되받음 -->
+    <insert id="insertDevice" parameterType="map"
+            useGeneratedKeys="true" keyProperty="deviceNo" keyColumn="DEVICE_NO">
+        INSERT INTO DEVICE (MEMBER_NO)
+        VALUES (#{memberNo})
+    </insert>
+
+    <!-- 그 회원의 디바이스 번호 (1회원 1디바이스 = UK_DEVICE_MEMBER). 없으면 결과 없음 → null -->
+    <select id="getDeviceNoByMemberNo" resultType="long">
+        SELECT DEVICE_NO
+          FROM DEVICE
+         WHERE MEMBER_NO = #{memberNo}
+    </select>
+
+    <select id="existsByDeviceNo" resultType="boolean">
+        SELECT CASE WHEN COUNT(*) > 0 THEN 1 ELSE 0 END
+          FROM DEVICE
+         WHERE DEVICE_NO = #{deviceNo}
+    </select>
+
+    <!-- 보고마다 새 행. PK(STEP_LOG_NO)·CREATE_DATE 는 INSERT 컬럼에 넣지 않음 -->
+    <insert id="insertStepLog">
+        INSERT INTO STEP_LOG (DEVICE_NO, TODAY_STEPS)
+        VALUES (#{deviceNo}, #{todaySteps})
+    </insert>
+
+    <!-- 오늘(자정 이후) 보고 기록. 누적값이라 시간순이면 우상향 곡선. -->
+    <select id="getTodayStepPoints" resultType="TodayStepPoint">
+        SELECT CREATE_DATE
+             , TODAY_STEPS
+          FROM STEP_LOG
+         WHERE DEVICE_NO = #{deviceNo}
+           AND CREATE_DATE >= TRUNC(SYSDATE)
+         ORDER BY CREATE_DATE
+    </select>
+
+    <!-- 오늘 포함 7일. 하루 총 걸음 = 그날 MAX(TODAY_STEPS). 데이터 없는 날은 행 자체가 없음. -->
+    <select id="getWeeklyStepCounts" resultType="DailyStepCount">
+        SELECT TRUNC(CREATE_DATE) AS STEP_DATE
+             , MAX(TODAY_STEPS)   AS STEPS
+          FROM STEP_LOG
+         WHERE DEVICE_NO = #{deviceNo}
+           AND CREATE_DATE >= TRUNC(SYSDATE) - 6
+         GROUP BY TRUNC(CREATE_DATE)
+         ORDER BY STEP_DATE
+    </select>
+
+</mapper>
