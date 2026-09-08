@@ -9,10 +9,10 @@ import org.springframework.transaction.annotation.Transactional;
 import com.allergyout.global.exception.CustomException;
 import com.allergyout.global.exception.ErrorCode;
 import com.allergyout.rasp.model.dao.RaspMapper;
+import com.allergyout.rasp.model.dto.DayStepResponse;
 import com.allergyout.rasp.model.dto.DeviceResponse;
 import com.allergyout.rasp.model.dto.StepLogCreateRequest;
-import com.allergyout.rasp.model.dto.TodayStepListResponse;
-import com.allergyout.rasp.model.dto.WeeklyStepListResponse;
+import com.allergyout.rasp.model.dto.WeekStepResponse;
 
 import lombok.RequiredArgsConstructor;
 
@@ -57,16 +57,16 @@ public class RaspService {
 
     // 오늘 인트라데이 곡선 (자정 리셋). 미등록 404, 데이터 없으면 빈 points.
     @Transactional(readOnly = true)
-    public TodayStepListResponse getTodaySteps(Long memberNo) {
+    public DayStepResponse getDaySteps(Long memberNo) {
         Long deviceNo = getDeviceNoOrThrow(memberNo);
-        return TodayStepListResponse.of(deviceNo, raspMapper.getTodayStepPoints(deviceNo));
+        return new DayStepResponse(deviceNo, raspMapper.getStepPoints(deviceNo));
     }
 
     // 지난 7일(오늘 포함) 일자별 총 걸음. 미등록 404, 데이터 없으면 빈 days.
     @Transactional(readOnly = true)
-    public WeeklyStepListResponse getWeekSteps(Long memberNo) {
+    public WeekStepResponse getWeekSteps(Long memberNo) {
         Long deviceNo = getDeviceNoOrThrow(memberNo);
-        return WeeklyStepListResponse.of(deviceNo, raspMapper.getWeeklyStepCounts(deviceNo));
+        return new WeekStepResponse(deviceNo, raspMapper.getDayStepList(deviceNo));
     }
 
     // memberNo 의 deviceNo. 미등록이면 DEVICE_NOT_FOUND (device 조회·걸음 조회 공통 규칙).
