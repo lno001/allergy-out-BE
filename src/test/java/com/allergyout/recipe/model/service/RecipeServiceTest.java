@@ -3,6 +3,7 @@ package com.allergyout.recipe.model.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -39,6 +40,7 @@ import com.allergyout.recipe.model.dto.RecipeDetailResponse;
 import com.allergyout.recipe.model.dto.RecipeListItem;
 import com.allergyout.recipe.model.dto.RecipeListQuery;
 import com.allergyout.recipe.model.dto.RecipeListResponse;
+import com.allergyout.recipe.model.dto.RecipeRecommendResponse;
 import com.allergyout.recipe.model.dto.RecipeUpdateRequest;
 import com.allergyout.recipe.model.dto.StepCreateRequest;
 import com.allergyout.recipe.model.dto.StepUpdateRequest;
@@ -677,5 +679,64 @@ class RecipeServiceTest {
                         ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.RECIPE_NOT_FOUND));
 
         verify(recipeMapper, never()).getRecipeByNo(anyLong());
+    }
+
+    // ---- 추천 조회 (GET /api/recipes/recommend) ----
+
+    private RecipeListItem recommend(long recipeNo, double calorie) {
+        return new RecipeListItem(recipeNo, "레시피" + recipeNo, "main.jpg",
+                "https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/1/x.jpg", "김민재",
+                LocalDate.of(2026, 9, 1), "반찬", "굽기", calorie, "닭가슴살", 0L);
+    }
+
+    @Test
+    @DisplayName("추천: totalCalories 2100 이면 perMeal 700 으로 매퍼 호출하고 결과를 그대로 감싼다")
+    void getRecommendedRecipes_success() {
+        List<RecipeListItem> found = List.of(recommend(11, 690), recommend(12, 720));
+        when(recipeMapper.getRecommendedRecipes(MEMBER_NO, 700.0, 3)).thenReturn(found);
+
+        RecipeRecommendResponse res = recipeService.getRecommendedRecipes(MEMBER_NO, 2100.0);
+
+        assertThat(res.recipes()).isSameAs(found);
+        verify(recipeMapper).getRecommendedRecipes(MEMBER_NO, 700.0, 3);
+    }
+
+    @Test
+    @DisplayName("추천: 후보가 없으면 빈 리스트 반환 (에러 아님)")
+    void getRecommendedRecipes_empty() {
+        when(recipeMapper.getRecommendedRecipes(MEMBER_NO, 700.0, 3)).thenReturn(List.of());
+
+        RecipeRecommendResponse res = recipeService.getRecommendedRecipes(MEMBER_NO, 2100.0);
+
+        assertThat(res.recipes()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("추천: totalCalories 가 null 이면 INVALID_INPUT_VALUE + data{totalCalories}, 매퍼 미호출")
+    void getRecommendedRecipes_null() {
+        assertThatThrownBy(() -> recipeService.getRecommendedRecipes(MEMBER_NO, null))
+                .isInstanceOfSatisfying(CustomException.class, ex -> {
+                    assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+                    assertThat(ex.getDetails()).containsKey("totalCalories");
+                });
+        verify(recipeMapper, never()).getRecommendedRecipes(anyLong(), anyDouble(), anyInt());
+    }
+
+    @Test
+    @DisplayName("추천: totalCalories 가 0 이하면 INVALID_INPUT_VALUE, 매퍼 미호출")
+    void getRecommendedRecipes_nonPositive() {
+        assertThatThrownBy(() -> recipeService.getRecommendedRecipes(MEMBER_NO, 0.0))
+                .isInstanceOfSatisfying(CustomException.class,
+                        ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.INVALID_INPUT_VALUE));
+        verify(recipeMapper, never()).getRecommendedRecipes(anyLong(), anyDouble(), anyInt());
+    }
+
+    @Test
+    @DisplayName("추천: totalCalories 가 상한(10000) 초과면 INVALID_INPUT_VALUE, 매퍼 미호출")
+    void getRecommendedRecipes_tooLarge() {
+        assertThatThrownBy(() -> recipeService.getRecommendedRecipes(MEMBER_NO, 10001.0))
+                .isInstanceOfSatisfying(CustomException.class,
+                        ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.INVALID_INPUT_VALUE));
+        verify(recipeMapper, never()).getRecommendedRecipes(anyLong(), anyDouble(), anyInt());
     }
 }
