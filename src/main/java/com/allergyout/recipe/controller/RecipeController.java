@@ -20,6 +20,7 @@ import com.allergyout.recipe.model.dto.RecipeCreateRequest;
 import com.allergyout.recipe.model.dto.RecipeDetailResponse;
 import com.allergyout.recipe.model.dto.RecipeListQuery;
 import com.allergyout.recipe.model.dto.RecipeListResponse;
+import com.allergyout.recipe.model.dto.RecipeRecommendQuery;
 import com.allergyout.recipe.model.dto.RecipeRecommendResponse;
 import com.allergyout.recipe.model.dto.RecipeUpdateRequest;
 import com.allergyout.recipe.model.service.RecipeService;
@@ -48,6 +49,19 @@ public class RecipeController {
         RecipeListResponse data = recipeService.getRecipeList(query, memberNo);
 
         return ResponseEntity.ok(ApiResponse.success("레시피 목록 조회 성공했습니다.", data));
+    }
+    
+    // GET /api/recipes/recommend — 오늘의 추천 최대 3개. 인증 선택(목록과 동일).
+    // date 는 필수(YYYY-MM-DD). 나머지 필터는 RecipeRecommendQuery @Valid.
+    @GetMapping("/recommend")
+    public ResponseEntity<ApiResponse<RecipeRecommendResponse>> getRecommendRecipes(
+            @Valid @ModelAttribute RecipeRecommendQuery query,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+
+        Long memberNo = (userDetails != null) ? userDetails.getMemberNo() : null;
+        RecipeRecommendResponse data = recipeService.getRecommendRecipes(query, memberNo);
+
+        return ResponseEntity.ok(ApiResponse.success("오늘의 추천 레시피 조회 성공했습니다.", data));
     }
 
     // GET /api/recipes/recommend?totalCalories=2100 — 인증 필요.

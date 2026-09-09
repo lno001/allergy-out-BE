@@ -441,5 +441,34 @@
            AND MEMBER_NO = #{memberNo}
            AND DEL_YN    = 'N'
     </update>
+    
+        <!-- 오늘의 추천 3개. WHERE 는 목록과 공유.
+         ORA_HASH(레시피번호 || 날짜) 는 같은 입력이면 항상 같은 숫자.
+         RECIPE_NO 는 해시 동점일 때 순서가 안 바뀌게 하는 tie-breaker.
+         후보가 3개 미만이면 있는 행만 나온다. -->
+    <select id="getRecommendRecipes" resultType="RecipeListItem">
+        SELECT
+               r.RECIPE_NO
+            ,  r.RECIPE_TITLE
+            ,  r.RECIPE_MAIN_IMG
+            ,  r.RECIPES_IMG_PATH
+            ,  m.MEMBER_NAME
+            ,  r.CREATE_DATE
+            ,  r.RECIPE_TYPE
+            ,  r.COOKING_METHOD
+            ,  r.CALORIE
+            ,  r.MAIN_MATERIAL
+            ,  r.VIEW_COUNT
+          FROM
+               RECIPES r
+          JOIN
+               MEMBER  m
+            ON r.MEMBER_NO = m.MEMBER_NO
+        <include refid="recipeListWhere"/>
+        ORDER BY
+               ORA_HASH(TO_CHAR(r.RECIPE_NO) || #{date})
+            ,  r.RECIPE_NO
+        FETCH FIRST 3 ROWS ONLY
+    </select>
 
 </mapper>

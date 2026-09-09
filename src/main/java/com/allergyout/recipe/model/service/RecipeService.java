@@ -1,6 +1,7 @@
 package com.allergyout.recipe.model.service;
 
 import java.net.URI;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -29,6 +30,7 @@ import com.allergyout.recipe.model.dto.RecipeDetailResponse;
 import com.allergyout.recipe.model.dto.RecipeListItem;
 import com.allergyout.recipe.model.dto.RecipeListQuery;
 import com.allergyout.recipe.model.dto.RecipeListResponse;
+import com.allergyout.recipe.model.dto.RecipeRecommendQuery;
 import com.allergyout.recipe.model.dto.RecipeRecommendResponse;
 import com.allergyout.recipe.model.dto.RecipeUpdateRequest;
 import com.allergyout.recipe.model.dto.StepCreateRequest;
@@ -155,6 +157,23 @@ public class RecipeService {
 
         pageInfo.calculateTotalPage(totalElements);
         return new RecipeListResponse(recipes, pageInfo);
+    }
+    
+    // 오늘의 추천 레시피
+    @Transactional(readOnly = true)
+    public RecipeRecommendResponse getRecommendRecipes(RecipeRecommendQuery query, Long memberNo) {
+        String kw = normalizeKeyword(query.keyword());
+        List<String> excludes = normalizeExcludeMaterials(query.excludeMaterials());
+        String recipeType = blankToNull(query.recipeType());
+        String cookingMethod = blankToNull(query.cookingMethod());
+
+        boolean applyMyAllergy = !"false".equals(query.applyMyAllergy());
+        Long allergyMemberNo = (applyMyAllergy && memberNo != null) ? memberNo : null;
+
+        List<RecipeListItem> recipes = recipeMapper.getRecommendRecipes(
+                allergyMemberNo, kw, excludes, recipeType, cookingMethod, query.date());
+
+        return new RecipeRecommendResponse(recipes);
     }
 
     // 정렬 화이트리스트. "popular"(인기순=조회수 내림차순) 만 인정하고 나머지(null·오타·대문자)는 전부 "latest"(최신순).
