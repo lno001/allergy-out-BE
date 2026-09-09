@@ -414,9 +414,11 @@
          재료·단계 목록 로드는 위 getMaterialsByRecipeNo / getStepsByRecipeNo 재사용
          ======================================================================== -->
 
-    <!-- 수정 대상 조회 : 소유자(MEMBER_NO) 확인 + 기존 이미지 값(대표 이미지 미변경 시 재입력용) 확보 -->
-    <!-- 컬럼 순서·개수를 Recipe VO 생성자와 정확히 맞춘다 (MyBatis 컬럼순서 기반 생성자 자동매핑).
-         VO 필드가 바뀌면 이 SELECT 목록도 같이 고쳐야 한다. -->
+
+    <!-- 수정 대상 조회 : 소유자(MEMBER_NO) 확인 + 기존 이미지 값(대표 이미지 미변경 시 재입력용) 확보.
+         Recipe VO 는 RECIPES 전체 컬럼(17개)을 담는 불변 @AllArgsConstructor VO 라, MyBatis 생성자
+         auto-mapping 이 되려면 SELECT 컬럼 수·순서가 VO 필드와 정확히 일치해야 한다 → 전체 컬럼을 나열한다.
+         (기능상 수정/삭제는 memberNo·이미지·delYn 만 쓰지만, 일부만 select 하면 생성자 인자 개수 불일치로 실패) -->
     <select id="getRecipeByNo" resultType="com.allergyout.recipe.model.vo.Recipe">
         SELECT
                RECIPE_NO
