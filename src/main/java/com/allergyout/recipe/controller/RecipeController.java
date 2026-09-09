@@ -20,6 +20,7 @@ import com.allergyout.recipe.model.dto.RecipeCreateRequest;
 import com.allergyout.recipe.model.dto.RecipeDetailResponse;
 import com.allergyout.recipe.model.dto.RecipeListQuery;
 import com.allergyout.recipe.model.dto.RecipeListResponse;
+import com.allergyout.recipe.model.dto.RecipeCalorieRecommendResponse;
 import com.allergyout.recipe.model.dto.RecipeRecommendQuery;
 import com.allergyout.recipe.model.dto.RecipeRecommendResponse;
 import com.allergyout.recipe.model.dto.RecipeUpdateRequest;
@@ -70,10 +71,10 @@ public class RecipeController {
     // 날짜기반 "오늘의 추천"(GET /api/recipes/recommend)과 별개 엔드포인트다.
     // totalCalories 누락/범위밖은 Service 에서 400(INVALID_INPUT_VALUE), 숫자 아님은 400(TypeMismatch).
     @GetMapping("/recommend/calorie")
-    public ResponseEntity<ApiResponse<RecipeRecommendResponse>> getCalorieRecommendRecipes(
+    public ResponseEntity<ApiResponse<RecipeCalorieRecommendResponse>> getCalorieRecommendRecipes(
             @RequestParam(name = "totalCalories", required = false) Double totalCalories,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
-        RecipeRecommendResponse data =
+        RecipeCalorieRecommendResponse data =
                 recipeService.getCalorieRecommendRecipes(userDetails.getMemberNo(), totalCalories);
         return ResponseEntity.ok(ApiResponse.success("칼로리 기반 추천 레시피를 조회했습니다.", data));
     }

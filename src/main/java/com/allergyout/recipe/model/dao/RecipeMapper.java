@@ -8,6 +8,7 @@ import org.apache.ibatis.annotations.Param;
 
 import com.allergyout.recipe.model.dto.RecipeDetailItem;
 import com.allergyout.recipe.model.dto.RecipeListItem;
+import com.allergyout.recipe.model.dto.RecipeRecommendItem;
 import com.allergyout.recipe.model.vo.Material;
 import com.allergyout.recipe.model.vo.Recipe;
 import com.allergyout.recipe.model.vo.RecipeStep;
@@ -108,11 +109,12 @@ public interface RecipeMapper {
     // WHERE 에 memberNo 도 걸어 소유자 이중 확인 (Service 에서 이미 검사하지만 백스톱)
     void updateRecipeDelYn(@Param("recipeNo") long recipeNo, @Param("memberNo") long memberNo);
     
-    // 오늘의 추천 레시피
-    List<RecipeListItem> getRecommendRecipes(@Param("memberNo") Long memberNo,
-                                             @Param("keyword") String keyword,
-                                             @Param("excludeMaterials") List<String> excludeMaterials,
-                                             @Param("recipeType") String recipeType,
-                                             @Param("cookingMethod") String cookingMethod,
-                                             @Param("date") String date);
+    // 오늘의 추천 레시피 (날짜 시드). 카드는 RecipeRecommendItem — 즐겨찾기 여부(isBookmarked) 미포함.
+    // memberNo = 알러지 제외용 (applyMyAllergy=false·비로그인이면 null).
+    List<RecipeRecommendItem> getRecommendRecipes(@Param("memberNo") Long memberNo,
+                                                  @Param("keyword") String keyword,
+                                                  @Param("excludeMaterials") List<String> excludeMaterials,
+                                                  @Param("recipeType") String recipeType,
+                                                  @Param("cookingMethod") String cookingMethod,
+                                                  @Param("date") String date);
 }

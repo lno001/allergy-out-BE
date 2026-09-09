@@ -40,7 +40,7 @@ import com.allergyout.recipe.model.dto.RecipeDetailResponse;
 import com.allergyout.recipe.model.dto.RecipeListItem;
 import com.allergyout.recipe.model.dto.RecipeListQuery;
 import com.allergyout.recipe.model.dto.RecipeListResponse;
-import com.allergyout.recipe.model.dto.RecipeRecommendResponse;
+import com.allergyout.recipe.model.dto.RecipeCalorieRecommendResponse;
 import com.allergyout.recipe.model.dto.RecipeUpdateRequest;
 import com.allergyout.recipe.model.dto.StepCreateRequest;
 import com.allergyout.recipe.model.dto.StepUpdateRequest;
@@ -793,7 +793,7 @@ class RecipeServiceTest {
         List<RecipeListItem> found = List.of(recommend(11, 690), recommend(12, 720));
         when(recipeMapper.getCalorieRecommendRecipes(MEMBER_NO, 700.0, 3)).thenReturn(found);
 
-        RecipeRecommendResponse res = recipeService.getCalorieRecommendRecipes(MEMBER_NO, 2100.0);
+        RecipeCalorieRecommendResponse res = recipeService.getCalorieRecommendRecipes(MEMBER_NO, 2100.0);
 
         assertThat(res.recipes()).isSameAs(found);
         verify(recipeMapper).getCalorieRecommendRecipes(MEMBER_NO, 700.0, 3);
@@ -804,7 +804,7 @@ class RecipeServiceTest {
     void getCalorieRecommendRecipes_empty() {
         when(recipeMapper.getCalorieRecommendRecipes(MEMBER_NO, 700.0, 3)).thenReturn(List.of());
 
-        RecipeRecommendResponse res = recipeService.getCalorieRecommendRecipes(MEMBER_NO, 2100.0);
+        RecipeCalorieRecommendResponse res = recipeService.getCalorieRecommendRecipes(MEMBER_NO, 2100.0);
 
         assertThat(res.recipes()).isEmpty();
     }

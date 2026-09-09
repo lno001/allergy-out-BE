@@ -528,7 +528,8 @@
          ORA_HASH(레시피번호 || 날짜) 는 같은 입력이면 항상 같은 숫자.
          RECIPE_NO 는 해시 동점일 때 순서가 안 바뀌게 하는 tie-breaker.
          후보가 3개 미만이면 있는 행만 나온다. -->
-    <select id="getRecommendRecipes" resultType="RecipeListItem">
+    <!-- 카드 = RecipeRecommendItem (11컬럼, isBookmarked 미포함). 칼로리 추천(getCalorieRecommendRecipes)과 별개. -->
+    <select id="getRecommendRecipes" resultType="com.allergyout.recipe.model.dto.RecipeRecommendItem">
         SELECT
                r.RECIPE_NO
             ,  r.RECIPE_TITLE
