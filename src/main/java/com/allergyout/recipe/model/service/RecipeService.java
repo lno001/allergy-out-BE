@@ -27,6 +27,7 @@ import com.allergyout.recipe.model.dto.RecipeCreateRequest;
 import com.allergyout.recipe.model.dto.RecipeDetailItem;
 import com.allergyout.recipe.model.dto.RecipeDetailResponse;
 import com.allergyout.recipe.model.dto.RecipeListItem;
+import com.allergyout.recipe.model.dto.RecipeListQuery;
 import com.allergyout.recipe.model.dto.RecipeListResponse;
 import com.allergyout.recipe.model.dto.RecipeRecommendItem;
 import com.allergyout.recipe.model.dto.RecipeRecommendResponse;
@@ -124,38 +125,43 @@ public class RecipeService {
         }
     }
 
-    // 목록 조회 — 최신순, OFFSET 페이징. data = { recipes, pageInfo }
-    // 비회원(memberNo == null) : 삭제만 제외 / 회원 : 그 회원 알러지 재료가 든 레시피도 제외
-    // keyword 있으면 제목(RECIPE_TITLE)에 포함된 것만 (없으면 전체). 매퍼는 keyword·memberNo 유무로 4갈래 분기.
+    // 목록 조회 (GET /api/recipes) — 목록·검색·필터·정렬 통합. data = { recipes, pageInfo }
+    //  - keyword          : 제목 부분일치 (공백뿐이면 무시)
+    //  - excludeMaterials : 제외 재료 (빈 리스트면 무시)
+    //  - recipeType / cookingMethod : 완전일치 (미전송이면 무시). 6값 밖이면 @Pattern 이 이미 400 처리
+    //  - sort             : "popular"(인기순) 만 인정, 그 외 전부 "latest"(최신순)
+    //  - applyMyAllergy   : false 면 회원이라도 알러지 자동제외 끔 → 매퍼엔 memberNo=null 로 넘김
+    //  형식 검증(page·size 범위, enum, applyMyAllergy 값)은 RecipeListQuery @Valid 가 담당한다.
     @Transactional(readOnly = true)
-    public RecipeListResponse getRecipeList(int page, int size, Long memberNo, String keyword) {
-        validatePageParams(page, size);
-
+    public RecipeListResponse getRecipeList(RecipeListQuery query, Long memberNo) {
         // keyword 정규화: null·공백뿐이면 null(전체조회). trim 은 "양쪽 끝" 공백만 없앤다 —
         // 문자 사이 공백은 그대로 유지되므로 "된 장" 으로 검색하면 "된장" 은 안 잡힌다(명세: keyword = 단어 하나).
-        String kw = normalizeKeyword(keyword);
+        String kw = normalizeKeyword(query.keyword());
+        List<String> excludes = normalizeExcludeMaterials(query.excludeMaterials()); // null/blank 항목 제거, 비면 null
+        String recipeType = blankToNull(query.recipeType());
+        String cookingMethod = blankToNull(query.cookingMethod());
+        String sort = normalizeSort(query.sort());                                   // "popular" 아니면 "latest"
 
-        PageInfo pageInfo = new PageInfo(page, size);
+        // applyMyAllergy: 미전송(null) 또는 "true" → 적용 / "false" → 미적용. (@Pattern 이 그 외 값은 이미 400)
+        boolean applyMyAllergy = !"false".equals(query.applyMyAllergy());
+        Long allergyMemberNo = (applyMyAllergy && memberNo != null) ? memberNo : null;
+
+        PageInfo pageInfo = new PageInfo(query.page(), query.size());
         int offset = pageInfo.getOffset();
 
-        List<RecipeListItem> recipes;
-        int totalElements;
-        if (memberNo == null && kw == null) {
-            recipes = recipeMapper.getRecipeList(offset, size);
-            totalElements = recipeMapper.countRecipeList();
-        } else if (memberNo == null) { // 비회원 + 키워드
-            recipes = recipeMapper.getRecipeListByKeyword(offset, size, kw);
-            totalElements = recipeMapper.countRecipeListByKeyword(kw);
-        } else if (kw == null) {        // 회원 + 키워드 없음
-            recipes = recipeMapper.getRecipeListForMember(offset, size, memberNo);
-            totalElements = recipeMapper.countRecipeListForMember(memberNo);
-        } else {                        // 회원 + 키워드
-            recipes = recipeMapper.getRecipeListForMemberByKeyword(offset, size, memberNo, kw);
-            totalElements = recipeMapper.countRecipeListForMemberByKeyword(memberNo, kw);
-        }
+        List<RecipeListItem> recipes = recipeMapper.getRecipeList(
+                offset, query.size(), allergyMemberNo, kw, excludes, recipeType, cookingMethod, sort);
+        int totalElements = recipeMapper.countRecipeList(
+                allergyMemberNo, kw, excludes, recipeType, cookingMethod);
 
         pageInfo.calculateTotalPage(totalElements);
         return new RecipeListResponse(recipes, pageInfo);
+    }
+
+    // 정렬 화이트리스트. "popular"(인기순=조회수 내림차순) 만 인정하고 나머지(null·오타·대문자)는 전부 "latest"(최신순).
+    // 이 값이 ${} 없이 매퍼 <choose> 로 가므로, 여기서 좁혀두면 SQL 주입 여지가 없다.
+    private String normalizeSort(String sort) {
+        return "popular".equals(sort) ? "popular" : "latest";
     }
 
     // 검색어 정규화. 양쪽 끝 공백 제거 후 비었으면 null(= 전체조회).
@@ -173,29 +179,6 @@ public class RecipeService {
                 .replace("\\", "\\\\")  // \ 를 먼저 (뒤 치환의 이스케이프 문자와 겹치지 않게)
                 .replace("%", "\\%")
                 .replace("_", "\\_");
-    }
-
-    // ============================================================
-    //  필터 조회 — 프론트 목록 페이지의 통합 엔드포인트. keyword(제목) + excludeMaterials(제외 재료)를 함께 건다.
-    //  회원이면 본인 알러지 재료가 든 레시피도 제외. 조건 3개 모두 선택(없으면 무시) → 매퍼에서 <if> 로 조립.
-    //  게스트/회원 분기 없이 memberNo·keyword·excludeMaterials 를 그대로 넘긴다 (null/빈값이면 그 조건 생략).
-    // ============================================================
-    @Transactional(readOnly = true)
-    public RecipeListResponse getFilteredRecipeList(int page, int size, Long memberNo,
-                                                    String keyword, List<String> excludeMaterials) {
-        validatePageParams(page, size);
-
-        String kw = normalizeKeyword(keyword);                       // blank → null
-        List<String> excludes = normalizeExcludeMaterials(excludeMaterials); // null/blank 항목 제거, 비면 null
-
-        PageInfo pageInfo = new PageInfo(page, size);
-        int offset = pageInfo.getOffset();
-
-        List<RecipeListItem> recipes = recipeMapper.getFilteredRecipeList(offset, size, memberNo, kw, excludes);
-        int totalElements = recipeMapper.countFilteredRecipeList(memberNo, kw, excludes);
-
-        pageInfo.calculateTotalPage(totalElements);
-        return new RecipeListResponse(recipes, pageInfo);
     }
 
     // 오늘 하루 목표 칼로리 기준 추천 — FE 가 계산한 totalCalories 를 끼니 수로 나눈 값(perMeal)에
@@ -497,13 +480,6 @@ public class RecipeService {
             });
         } else {
             deleteQuietly(keys);
-        }
-    }
-
-    // 형식(기본값·타입)은 Controller @RequestParam, 여기선 값 범위만 (page ≥ 0, 1 ≤ size ≤ 50)
-    private void validatePageParams(int page, int size) {
-        if (page < 0 || size < 1 || size > 50) {
-            throw new CustomException(ErrorCode.INVALID_INPUT_VALUE);
         }
     }
 

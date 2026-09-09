@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -143,5 +144,49 @@ class RecipeControllerBindingTest {
         assertThat(r.stepList().get(0).stepImg()).isNotNull();
         assertThat(r.stepList().get(1).stepNo()).isNull();
         assertThat(r.stepList().get(1).stepImg()).isNull();
+    }
+
+    // ---- GET /api/recipes 목록 쿼리 파라미터 검증 (RecipeListQuery @Valid) ----
+    //  page·size 범위, recipeType/cookingMethod enum, applyMyAllergy 값이 잘못되면 컨트롤러 진입 전에 400.
+    //  (기존엔 Service.validatePageParams 가 하던 일 — 통합하면서 DTO @Valid 로 이관됨)
+
+    @Test
+    @DisplayName("GET /api/recipes?page=-1 → 400 (page 음수)")
+    void getRecipeList_negativePage_returns400() throws Exception {
+        mockMvc.perform(get("/api/recipes").param("page", "-1"))
+                .andExpect(status().isBadRequest());
+        verify(recipeService, org.mockito.Mockito.never()).getRecipeList(any(), any());
+    }
+
+    @Test
+    @DisplayName("GET /api/recipes?size=51 → 400 (size 상한 초과)")
+    void getRecipeList_sizeTooLarge_returns400() throws Exception {
+        mockMvc.perform(get("/api/recipes").param("size", "51"))
+                .andExpect(status().isBadRequest());
+        verify(recipeService, org.mockito.Mockito.never()).getRecipeList(any(), any());
+    }
+
+    @Test
+    @DisplayName("GET /api/recipes?recipeType=삶기 → 400 (enum 밖 값)")
+    void getRecipeList_invalidRecipeType_returns400() throws Exception {
+        mockMvc.perform(get("/api/recipes").param("recipeType", "삶기"))
+                .andExpect(status().isBadRequest());
+        verify(recipeService, org.mockito.Mockito.never()).getRecipeList(any(), any());
+    }
+
+    @Test
+    @DisplayName("GET /api/recipes?applyMyAllergy=yes → 400 (true|false 만 허용)")
+    void getRecipeList_invalidApplyMyAllergy_returns400() throws Exception {
+        mockMvc.perform(get("/api/recipes").param("applyMyAllergy", "yes"))
+                .andExpect(status().isBadRequest());
+        verify(recipeService, org.mockito.Mockito.never()).getRecipeList(any(), any());
+    }
+
+    @Test
+    @DisplayName("GET /api/recipes?sort=엉뚱한값 → 200 (sort 는 @Pattern 없음 — Service 가 latest 로 폴백)")
+    void getRecipeList_invalidSort_passesThrough() throws Exception {
+        mockMvc.perform(get("/api/recipes").param("sort", "엉뚱한값"))
+                .andExpect(status().isOk());
+        verify(recipeService).getRecipeList(any(), any());
     }
 }
