@@ -40,7 +40,6 @@ import com.allergyout.recipe.model.dto.RecipeDetailResponse;
 import com.allergyout.recipe.model.dto.RecipeListItem;
 import com.allergyout.recipe.model.dto.RecipeListQuery;
 import com.allergyout.recipe.model.dto.RecipeListResponse;
-import com.allergyout.recipe.model.dto.RecipeRecommendItem;
 import com.allergyout.recipe.model.dto.RecipeRecommendResponse;
 import com.allergyout.recipe.model.dto.RecipeUpdateRequest;
 import com.allergyout.recipe.model.dto.StepCreateRequest;
@@ -684,15 +683,16 @@ class RecipeServiceTest {
 
     // ---- 추천 조회 (GET /api/recipes/recommend) ----
 
-    private RecipeRecommendItem recommend(long recipeNo, double calorie) {
-        return new RecipeRecommendItem(recipeNo, "레시피" + recipeNo,
-                "https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/1/x.jpg", "김민재", calorie);
+    private RecipeListItem recommend(long recipeNo, double calorie) {
+        return new RecipeListItem(recipeNo, "레시피" + recipeNo, "main.jpg",
+                "https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/1/x.jpg", "김민재",
+                LocalDate.of(2026, 9, 1), "반찬", "굽기", calorie, "닭가슴살", 0L);
     }
 
     @Test
     @DisplayName("추천: totalCalories 2100 이면 perMeal 700 으로 매퍼 호출하고 결과를 그대로 감싼다")
     void getRecommendedRecipes_success() {
-        List<RecipeRecommendItem> found = List.of(recommend(11, 690), recommend(12, 720));
+        List<RecipeListItem> found = List.of(recommend(11, 690), recommend(12, 720));
         when(recipeMapper.getRecommendedRecipes(MEMBER_NO, 700.0, 3)).thenReturn(found);
 
         RecipeRecommendResponse res = recipeService.getRecommendedRecipes(MEMBER_NO, 2100.0);

@@ -206,13 +206,19 @@
          - CALORIE IS NOT NULL 인 레시피만 후보
          - |CALORIE - perMeal| 오름차순, 동점은 조회수 많은 순 → 등록 오래된 순 → RECIPE_NO
          ======================================================================== -->
-    <select id="getRecommendedRecipes" resultType="RecipeRecommendItem">
+    <select id="getRecommendedRecipes" resultType="RecipeListItem">
         SELECT
                r.RECIPE_NO
             ,  r.RECIPE_TITLE
+            ,  r.RECIPE_MAIN_IMG
             ,  r.RECIPES_IMG_PATH
             ,  m.MEMBER_NAME
+            ,  r.CREATE_DATE
+            ,  r.RECIPE_TYPE
+            ,  r.COOKING_METHOD
             ,  r.CALORIE
+            ,  r.MAIN_MATERIAL
+            ,  r.VIEW_COUNT
           FROM
                RECIPES r
           JOIN

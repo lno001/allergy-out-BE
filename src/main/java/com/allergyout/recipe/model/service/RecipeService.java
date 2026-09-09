@@ -29,7 +29,6 @@ import com.allergyout.recipe.model.dto.RecipeDetailResponse;
 import com.allergyout.recipe.model.dto.RecipeListItem;
 import com.allergyout.recipe.model.dto.RecipeListQuery;
 import com.allergyout.recipe.model.dto.RecipeListResponse;
-import com.allergyout.recipe.model.dto.RecipeRecommendItem;
 import com.allergyout.recipe.model.dto.RecipeRecommendResponse;
 import com.allergyout.recipe.model.dto.RecipeUpdateRequest;
 import com.allergyout.recipe.model.dto.StepCreateRequest;
@@ -191,7 +190,7 @@ public class RecipeService {
                     Map.of("totalCalories", "0 초과 " + (int) TOTAL_CALORIES_MAX + " 이하의 값이 필요합니다."));
         }
         double perMeal = totalCalories / MEALS_PER_DAY;
-        List<RecipeRecommendItem> recipes =
+        List<RecipeListItem> recipes =
                 recipeMapper.getRecommendedRecipes(memberNo, perMeal, RECOMMEND_COUNT);
         return new RecipeRecommendResponse(recipes);
     }
