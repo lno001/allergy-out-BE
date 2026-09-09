@@ -84,4 +84,12 @@ public interface RecipeMapper {
     // ---- 레시피 삭제 : 소프트 삭제 (RECIPES.DEL_YN='Y'). MATERIAL·RECIPE_STEPS·S3 는 그대로 둔다 ----
     // WHERE 에 memberNo 도 걸어 소유자 이중 확인 (Service 에서 이미 검사하지만 백스톱)
     void updateRecipeDelYn(@Param("recipeNo") long recipeNo, @Param("memberNo") long memberNo);
+    
+    // 오늘의 추천 레시피
+    List<RecipeListItem> getRecommendRecipes(@Param("memberNo") Long memberNo,
+                                             @Param("keyword") String keyword,
+                                             @Param("excludeMaterials") List<String> excludeMaterials,
+                                             @Param("recipeType") String recipeType,
+                                             @Param("cookingMethod") String cookingMethod,
+                                             @Param("date") String date);
 }
