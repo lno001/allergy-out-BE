@@ -37,6 +37,7 @@ import com.allergyout.recipe.model.dto.RecipeCreateRequest;
 import com.allergyout.recipe.model.dto.RecipeDetailItem;
 import com.allergyout.recipe.model.dto.RecipeDetailResponse;
 import com.allergyout.recipe.model.dto.RecipeListItem;
+import com.allergyout.recipe.model.dto.RecipeListQuery;
 import com.allergyout.recipe.model.dto.RecipeListResponse;
 import com.allergyout.recipe.model.dto.RecipeUpdateRequest;
 import com.allergyout.recipe.model.dto.StepCreateRequest;
@@ -187,154 +188,144 @@ class RecipeServiceTest {
         verify(s3Service).delete("recipes/7/main.jpg");
     }
 
-    // ---- 목록 조회 ----
+    // ---- 목록 조회 (GET /api/recipes) : 목록·검색·필터·정렬 통합 ----
+    //  형식 검증(page·size 범위, recipeType/cookingMethod enum, applyMyAllergy 값)은 RecipeListQuery @Valid 담당 —
+    //  Mockito 단위 테스트는 @Valid 를 안 태우므로 여기선 "정규화 결과가 매퍼로 어떻게 넘어가는지" 만 본다.
 
-    // 비회원(memberNo == null): 알러지 없는 비회원용 매퍼(getRecipeList/countRecipeList) 호출,
-    // offset = page*size 계산, count 로 totalPages(올림) 세팅
+    // 편의: page/size 만 신경 쓰고 나머지 조건 없는 쿼리
+    private RecipeListQuery baseQuery(Integer page, Integer size) {
+        return new RecipeListQuery(page, size, null, null, null, null, null, null);
+    }
+
+    // 조건 없음 + 비회원 : 매퍼에 전부 null, sort 는 기본 "latest", offset·pageInfo 계산
     @Test
-    @DisplayName("목록 조회(비회원): 비회원 매퍼 호출 + offset·pageInfo 계산")
-    void getRecipeList_guest() {
+    @DisplayName("목록(비회원, 조건 없음): 매퍼에 null·latest 전달 + offset·totalPages 계산")
+    void getRecipeList_guestNoConditions() {
         List<RecipeListItem> rows = List.of(
-                new RecipeListItem(2L, "김치찌개", "kimchi.jpg", "https://img/2.jpg", "관리자", LocalDate.of(2026, 8, 21)),
-                new RecipeListItem(1L, "된장국", "doenjang.jpg", "https://img/1.jpg", "관리자", LocalDate.of(2026, 8, 20)));
-        when(recipeMapper.getRecipeList(20, 10)).thenReturn(rows); // page 2 * size 10 = offset 20
-        when(recipeMapper.countRecipeList()).thenReturn(37);
+                new RecipeListItem(2L, "김치찌개", "kimchi.jpg", "https://img/2.jpg", "관리자",
+                        LocalDate.of(2026, 8, 21), "국&찌개", "끓이기", 210.0, "김치", 9L),
+                new RecipeListItem(1L, "된장국", "doenjang.jpg", "https://img/1.jpg", "관리자",
+                        LocalDate.of(2026, 8, 20), "국&찌개", "끓이기", 120.0, "두부", 3L));
+        when(recipeMapper.getRecipeList(20, 10, null, null, null, null, null, "latest")).thenReturn(rows);
+        when(recipeMapper.countRecipeList(null, null, null, null, null)).thenReturn(37);
 
-        RecipeListResponse res = recipeService.getRecipeList(2, 10, null, null);
+        RecipeListResponse res = recipeService.getRecipeList(baseQuery(2, 10), null); // page 2 * size 10 = offset 20
 
         assertThat(res.recipes()).hasSize(2);
+        assertThat(res.recipes().get(0).viewCount()).isEqualTo(9L);
         assertThat(res.pageInfo().getOffset()).isEqualTo(20);
         assertThat(res.pageInfo().getTotalElements()).isEqualTo(37);
         assertThat(res.pageInfo().getTotalPages()).isEqualTo(4); // ceil(37/10)
-        verify(recipeMapper, never()).getRecipeListForMember(anyInt(), anyInt(), anyLong());
     }
 
-    // 회원(memberNo != null): 회원용 매퍼(getRecipeListForMember/countRecipeListForMember)로 분기
+    // 회원 + applyMyAllergy 미전송(null=true) : 알러지 제외 적용 → 매퍼에 memberNo 전달
     @Test
-    @DisplayName("목록 조회(회원): 회원 매퍼로 분기 호출")
-    void getRecipeList_member() {
-        when(recipeMapper.getRecipeListForMember(0, 20, 7L)).thenReturn(List.of());
-        when(recipeMapper.countRecipeListForMember(7L)).thenReturn(0);
+    @DisplayName("목록(회원, applyMyAllergy 미전송): 알러지 제외 적용 — 매퍼에 memberNo 전달")
+    void getRecipeList_memberAppliesAllergyByDefault() {
+        when(recipeMapper.getRecipeList(0, 20, 7L, null, null, null, null, "latest")).thenReturn(List.of());
+        when(recipeMapper.countRecipeList(7L, null, null, null, null)).thenReturn(0);
 
-        recipeService.getRecipeList(0, 20, 7L, null);
+        recipeService.getRecipeList(baseQuery(null, null), 7L);
 
-        verify(recipeMapper).getRecipeListForMember(0, 20, 7L);
-        verify(recipeMapper).countRecipeListForMember(7L);
-        verify(recipeMapper, never()).getRecipeList(anyInt(), anyInt());
+        verify(recipeMapper).getRecipeList(0, 20, 7L, null, null, null, null, "latest");
+        verify(recipeMapper).countRecipeList(7L, null, null, null, null);
     }
 
-    // page 음수는 Service 에서 차단 (매퍼 미호출)
+    // 회원 + applyMyAllergy="false" : 알러지 제외 끔 → 매퍼에 memberNo=null 전달 (비회원과 동일 취급)
     @Test
-    @DisplayName("page 음수면 CustomException, 매퍼 미호출")
-    void getRecipeList_negativePage() {
-        assertThatThrownBy(() -> recipeService.getRecipeList(-1, 10, null, null))
-                .isInstanceOf(CustomException.class);
-        verify(recipeMapper, never()).getRecipeList(anyInt(), anyInt());
+    @DisplayName("목록(회원, applyMyAllergy=false): 알러지 제외 끔 — 매퍼에 memberNo=null")
+    void getRecipeList_memberOptsOutAllergy() {
+        when(recipeMapper.getRecipeList(0, 20, null, null, null, null, null, "latest")).thenReturn(List.of());
+        when(recipeMapper.countRecipeList(null, null, null, null, null)).thenReturn(0);
+
+        RecipeListQuery query = new RecipeListQuery(null, null, null, null, null, null, null, "false");
+        recipeService.getRecipeList(query, 7L);
+
+        verify(recipeMapper).getRecipeList(0, 20, null, null, null, null, null, "latest");
     }
 
-    // size 상한(50) 초과도 차단
+    // keyword : 양쪽 공백 trim + LIKE 메타문자(\ % _) 이스케이프해서 매퍼로 (쿼리는 ESCAPE '\')
     @Test
-    @DisplayName("size가 50 초과면 CustomException")
-    void getRecipeList_sizeTooLarge() {
-        assertThatThrownBy(() -> recipeService.getRecipeList(0, 51, null, null))
-                .isInstanceOf(CustomException.class);
+    @DisplayName("목록: keyword 는 trim + %·_·\\ 이스케이프해서 매퍼에 전달")
+    void getRecipeList_keywordNormalizedAndEscaped() {
+        when(recipeMapper.getRecipeList(0, 20, null, "50\\% \\_ \\\\", null, null, null, "latest")).thenReturn(List.of());
+        when(recipeMapper.countRecipeList(null, "50\\% \\_ \\\\", null, null, null)).thenReturn(0);
+
+        RecipeListQuery query = new RecipeListQuery(null, null, "  50% _ \\  ", null, null, null, null, null);
+        recipeService.getRecipeList(query, null);
+
+        verify(recipeMapper).getRecipeList(0, 20, null, "50\\% \\_ \\\\", null, null, null, "latest");
     }
 
-    // ---- 키워드 검색 ----
-
-    // 비회원 + keyword : 비회원 키워드 매퍼로 분기, keyword 그대로 전달(특수문자 없으면 이스케이프 영향 없음)
+    // 공백뿐인 keyword → null (전체 조회)
     @Test
-    @DisplayName("검색(비회원): keyword 있으면 getRecipeListByKeyword 로 분기")
-    void getRecipeList_guestKeyword() {
-        when(recipeMapper.getRecipeListByKeyword(0, 20, "된장")).thenReturn(List.of());
-        when(recipeMapper.countRecipeListByKeyword("된장")).thenReturn(0);
+    @DisplayName("목록: 공백뿐인 keyword 는 null 로 전달")
+    void getRecipeList_blankKeywordBecomesNull() {
+        when(recipeMapper.getRecipeList(0, 20, null, null, null, null, null, "latest")).thenReturn(List.of());
+        when(recipeMapper.countRecipeList(null, null, null, null, null)).thenReturn(0);
 
-        recipeService.getRecipeList(0, 20, null, "된장");
+        RecipeListQuery query = new RecipeListQuery(null, null, "   ", null, null, null, null, null);
+        recipeService.getRecipeList(query, null);
 
-        verify(recipeMapper).getRecipeListByKeyword(0, 20, "된장");
-        verify(recipeMapper, never()).getRecipeList(anyInt(), anyInt());
+        verify(recipeMapper).getRecipeList(0, 20, null, null, null, null, null, "latest");
     }
 
-    // 회원 + keyword : 회원 키워드 매퍼(알러지 제외 + 키워드)로 분기
+    // excludeMaterials : null/blank 항목 제거 + 각 항목 trim + 이스케이프. 다 비면 null
     @Test
-    @DisplayName("검색(회원): keyword 있으면 getRecipeListForMemberByKeyword 로 분기")
-    void getRecipeList_memberKeyword() {
-        when(recipeMapper.getRecipeListForMemberByKeyword(0, 20, 7L, "된장")).thenReturn(List.of());
-        when(recipeMapper.countRecipeListForMemberByKeyword(7L, "된장")).thenReturn(0);
+    @DisplayName("목록: excludeMaterials 는 blank 제거 + trim + 이스케이프 후 매퍼로")
+    void getRecipeList_excludeMaterialsCleaned() {
+        when(recipeMapper.getRecipeList(0, 20, null, null, List.of("계란", "우유\\%"), null, null, "latest")).thenReturn(List.of());
+        when(recipeMapper.countRecipeList(null, null, List.of("계란", "우유\\%"), null, null)).thenReturn(0);
 
-        recipeService.getRecipeList(0, 20, 7L, "된장");
+        RecipeListQuery query = new RecipeListQuery(null, null, null,
+                java.util.Arrays.asList(" 계란 ", "", "  ", "우유%"), null, null, null, null);
+        recipeService.getRecipeList(query, null);
 
-        verify(recipeMapper).getRecipeListForMemberByKeyword(0, 20, 7L, "된장");
-        verify(recipeMapper, never()).getRecipeListForMember(anyInt(), anyInt(), anyLong());
+        verify(recipeMapper).getRecipeList(0, 20, null, null, List.of("계란", "우유\\%"), null, null, "latest");
     }
 
-    // 공백뿐인 keyword : trim 후 빈 문자열 → null 취급 → 키워드 매퍼 안 타고 전체조회 분기
+    // excludeMaterials 가 blank 뿐이면 null 로
     @Test
-    @DisplayName("검색: 공백뿐인 keyword 는 전체조회로 (키워드 매퍼 미호출)")
-    void getRecipeList_blankKeyword_fallsBackToAll() {
-        when(recipeMapper.getRecipeList(0, 20)).thenReturn(List.of());
-        when(recipeMapper.countRecipeList()).thenReturn(0);
+    @DisplayName("목록: excludeMaterials 가 전부 blank 면 null 로 전달")
+    void getRecipeList_excludeMaterialsAllBlankBecomesNull() {
+        when(recipeMapper.getRecipeList(0, 20, null, null, null, null, null, "latest")).thenReturn(List.of());
+        when(recipeMapper.countRecipeList(null, null, null, null, null)).thenReturn(0);
 
-        recipeService.getRecipeList(0, 20, null, "   ");
+        RecipeListQuery query = new RecipeListQuery(null, null, null,
+                java.util.Arrays.asList("  ", ""), null, null, null, null);
+        recipeService.getRecipeList(query, null);
 
-        verify(recipeMapper).getRecipeList(0, 20);
-        verify(recipeMapper, never()).getRecipeListByKeyword(anyInt(), anyInt(), anyString());
+        verify(recipeMapper).getRecipeList(0, 20, null, null, null, null, null, "latest");
     }
 
-    // LIKE 메타문자(%)는 이스케이프되어 매퍼에 넘어간다 ("50%" → "50\%", 쿼리는 ESCAPE '\')
+    // recipeType·cookingMethod : trim 후 그대로 매퍼로 (6값 검증은 @Valid 담당). blank → null
     @Test
-    @DisplayName("검색: keyword 의 %·_·\\ 는 이스케이프해서 매퍼에 전달")
-    void getRecipeList_keywordEscaped() {
-        when(recipeMapper.getRecipeListByKeyword(0, 20, "50\\% \\_ \\\\")).thenReturn(List.of());
-        when(recipeMapper.countRecipeListByKeyword("50\\% \\_ \\\\")).thenReturn(0);
+    @DisplayName("목록: recipeType·cookingMethod 는 trim 해서 매퍼로, blank 는 null")
+    void getRecipeList_typeAndMethodPassthrough() {
+        when(recipeMapper.getRecipeList(0, 20, null, null, null, "반찬", null, "latest")).thenReturn(List.of());
+        when(recipeMapper.countRecipeList(null, null, null, "반찬", null)).thenReturn(0);
 
-        recipeService.getRecipeList(0, 20, null, "  50% _ \\  ");
+        RecipeListQuery query = new RecipeListQuery(null, null, null, null, " 반찬 ", "   ", null, null);
+        recipeService.getRecipeList(query, null);
 
-        verify(recipeMapper).getRecipeListByKeyword(0, 20, "50\\% \\_ \\\\");
+        verify(recipeMapper).getRecipeList(0, 20, null, null, null, "반찬", null, "latest");
     }
 
-    // ---- 필터 조회 (getFilteredRecipeList) — 분기 없이 memberNo·keyword·excludeMaterials 를 매퍼에 전달 ----
-
+    // sort 화이트리스트 : "popular" 만 통과, 그 외(null·오타)는 전부 "latest"
     @Test
-    @DisplayName("필터: keyword·excludeMaterials·memberNo 를 정규화해 매퍼에 그대로 전달")
-    void getFilteredRecipeList_passesThrough() {
-        when(recipeMapper.getFilteredRecipeList(0, 20, 7L, "된장", List.of("계란", "우유"))).thenReturn(List.of());
-        when(recipeMapper.countFilteredRecipeList(7L, "된장", List.of("계란", "우유"))).thenReturn(0);
+    @DisplayName("목록: sort=popular 는 그대로, 잘못된 값은 latest 로 폴백")
+    void getRecipeList_sortWhitelist() {
+        when(recipeMapper.getRecipeList(anyInt(), anyInt(), any(), any(), any(), any(), any(), anyString()))
+                .thenReturn(List.of());
+        when(recipeMapper.countRecipeList(any(), any(), any(), any(), any())).thenReturn(0);
 
-        recipeService.getFilteredRecipeList(0, 20, 7L, " 된장 ", List.of(" 계란 ", "", "  ", "우유"));
+        recipeService.getRecipeList(new RecipeListQuery(null, null, null, null, null, null, "popular", null), null);
+        recipeService.getRecipeList(new RecipeListQuery(null, null, null, null, null, null, "POPULAR", null), null);
+        recipeService.getRecipeList(new RecipeListQuery(null, null, null, null, null, null, "asdf", null), null);
+        recipeService.getRecipeList(new RecipeListQuery(null, null, null, null, null, null, null, null), null);
 
-        verify(recipeMapper).getFilteredRecipeList(0, 20, 7L, "된장", List.of("계란", "우유"));
-        verify(recipeMapper).countFilteredRecipeList(7L, "된장", List.of("계란", "우유"));
-    }
-
-    @Test
-    @DisplayName("필터: keyword 공백뿐·excludeMaterials 빈 리스트면 둘 다 null 로 전달 (매퍼 <if> 가 조건 생략)")
-    void getFilteredRecipeList_emptyConditionsBecomeNull() {
-        when(recipeMapper.getFilteredRecipeList(0, 20, null, null, null)).thenReturn(List.of());
-        when(recipeMapper.countFilteredRecipeList(null, null, null)).thenReturn(0);
-
-        recipeService.getFilteredRecipeList(0, 20, null, "   ", List.of("  ", ""));
-
-        verify(recipeMapper).getFilteredRecipeList(0, 20, null, null, null);
-    }
-
-    @Test
-    @DisplayName("필터: excludeMaterials 각 항목의 %·_·\\ 도 이스케이프해서 전달")
-    void getFilteredRecipeList_excludeMaterialsEscaped() {
-        when(recipeMapper.getFilteredRecipeList(0, 20, null, null, List.of("계란\\%"))).thenReturn(List.of());
-        when(recipeMapper.countFilteredRecipeList(null, null, List.of("계란\\%"))).thenReturn(0);
-
-        recipeService.getFilteredRecipeList(0, 20, null, null, List.of("계란%"));
-
-        verify(recipeMapper).getFilteredRecipeList(0, 20, null, null, List.of("계란\\%"));
-    }
-
-    @Test
-    @DisplayName("필터: page 범위 밖이면 CustomException, 매퍼 미호출")
-    void getFilteredRecipeList_invalidPage() {
-        assertThatThrownBy(() -> recipeService.getFilteredRecipeList(-1, 20, null, null, null))
-                .isInstanceOf(CustomException.class);
-        verify(recipeMapper, never()).getFilteredRecipeList(anyInt(), anyInt(), any(), any(), any());
+        verify(recipeMapper).getRecipeList(0, 20, null, null, null, null, null, "popular");
+        verify(recipeMapper, times(3)).getRecipeList(0, 20, null, null, null, null, null, "latest");
     }
 
     // ---- 상세 조회 ----
