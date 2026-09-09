@@ -30,6 +30,8 @@ import com.allergyout.recipe.model.dto.RecipeDetailResponse;
 import com.allergyout.recipe.model.dto.RecipeListItem;
 import com.allergyout.recipe.model.dto.RecipeListQuery;
 import com.allergyout.recipe.model.dto.RecipeListResponse;
+import com.allergyout.recipe.model.dto.RecipeCalorieRecommendResponse;
+import com.allergyout.recipe.model.dto.RecipeRecommendItem;
 import com.allergyout.recipe.model.dto.RecipeRecommendQuery;
 import com.allergyout.recipe.model.dto.RecipeRecommendResponse;
 import com.allergyout.recipe.model.dto.RecipeUpdateRequest;
@@ -172,7 +174,7 @@ public class RecipeService {
         boolean applyMyAllergy = !"false".equals(query.applyMyAllergy());
         Long allergyMemberNo = (applyMyAllergy && memberNo != null) ? memberNo : null;
 
-        List<RecipeListItem> recipes = recipeMapper.getRecommendRecipes(
+        List<RecipeRecommendItem> recipes = recipeMapper.getRecommendRecipes(
                 allergyMemberNo, kw, excludes, recipeType, cookingMethod, query.date());
 
         return new RecipeRecommendResponse(recipes);
@@ -231,7 +233,7 @@ public class RecipeService {
     // CALORIE 가 가장 가까운 레시피 상위 N개. 회원 알러지 재료가 든 레시피는 제외.
     // 후보가 없으면(칼로리 미기재/전부 알러지 제외) 빈 리스트 + 200. 날짜기반 "오늘의 추천"과 별개.
     @Transactional(readOnly = true)
-    public RecipeRecommendResponse getCalorieRecommendRecipes(long memberNo, Double totalCalories) {
+    public RecipeCalorieRecommendResponse getCalorieRecommendRecipes(long memberNo, Double totalCalories) {
         if (totalCalories == null || totalCalories <= 0 || totalCalories > TOTAL_CALORIES_MAX) {
             throw new CustomException(ErrorCode.INVALID_INPUT_VALUE,
                     Map.of("totalCalories", "0 초과 " + (int) TOTAL_CALORIES_MAX + " 이하의 값이 필요합니다."));
@@ -239,7 +241,7 @@ public class RecipeService {
         double perMeal = totalCalories / MEALS_PER_DAY;
         List<RecipeListItem> recipes =
                 recipeMapper.getCalorieRecommendRecipes(memberNo, perMeal, RECOMMEND_COUNT);
-        return new RecipeRecommendResponse(recipes);
+        return new RecipeCalorieRecommendResponse(recipes);
     }
 
     // 제외 재료 목록 정규화: null/blank 항목 제거 + 각 항목 trim + LIKE 이스케이프.
