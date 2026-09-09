@@ -2,6 +2,8 @@ package com.allergyout.recipe.model.dto;
 
 import java.time.LocalDate;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 // 목록 조회 응답의 레시피 1건. RECIPES ⨝ MEMBER 프로젝션을 매퍼 resultType 으로 직접 매핑한다.
 // map-underscore-to-camel-case 로 RECIPE_TYPE→recipeType 등 자동 매핑.
 public record RecipeListItem(
@@ -15,6 +17,9 @@ public record RecipeListItem(
         String cookingMethod,   // COOKING_METHOD  (굽기/튀기기/볶기/찌기/끓이기/기타)
         Double calorie,         // CALORIE NUMBER NULL — 목록 카드 표시용 (탄·단·지·나트륨은 상세에서만)
         String mainMaterial,    // MAIN_MATERIAL NVARCHAR2(20) NULL — 메인 재료 1개
-        Long viewCount          // VIEW_COUNT NUMBER — 조회수
+        Long viewCount,         // VIEW_COUNT NUMBER — 조회수
+
+        @JsonProperty("isBookmarked") // is 접두사 프로퍼티명 그대로 직렬화 (명세서 필드명 = isBookmarked)
+        boolean isBookmarked    // 로그인 회원의 즐겨찾기 여부 (비로그인 → false). 매퍼가 IS_BOOKMARKED(0/1)로 내려줌
 ) {
 }

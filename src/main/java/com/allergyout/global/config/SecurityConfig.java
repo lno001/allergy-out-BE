@@ -55,6 +55,7 @@ public class SecurityConfig {
                                 "/api/auth/refresh",
                                 "/api/auth/logout"
                         ).permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/recipes/me").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/recipes/recommend").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/recipes/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/recipes").authenticated()

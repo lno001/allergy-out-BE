@@ -168,11 +168,25 @@
             ,  r.CALORIE
             ,  r.MAIN_MATERIAL
             ,  r.VIEW_COUNT
+        <choose>
+            <when test="bookmarkMemberNo != null">
+            ,  CASE WHEN bm.RECIPE_NO IS NULL THEN 0 ELSE 1 END AS IS_BOOKMARKED
+            </when>
+            <otherwise>
+            ,  0 AS IS_BOOKMARKED
+            </otherwise>
+        </choose>
           FROM
                RECIPES r
           JOIN
                MEMBER  m
             ON r.MEMBER_NO = m.MEMBER_NO
+        <if test="bookmarkMemberNo != null">
+          LEFT JOIN
+               BOOKMARK bm
+            ON bm.RECIPE_NO = r.RECIPE_NO
+           AND bm.MEMBER_NO = #{bookmarkMemberNo}
+        </if>
         <include refid="recipeListWhere"/>
         <!-- 정렬 : popular = 조회수 내림차순, 그 외(latest) = 최신순. 동점 tie-breaker 로 RECIPE_NO DESC 를 항상 붙여
              페이지 경계에서 행이 중복·누락되지 않게 한다. sort 는 Service 화이트리스트("popular"|"latest") 통과값. -->
@@ -201,6 +215,54 @@
     </select>
 
     <!-- ========================================================================
+         내 레시피 조회 (GET /api/recipes/me) : 로그인 회원이 작성한 레시피 최신순 페이징
+         프로젝션은 getRecipeList 와 동일. WHERE 는 소유(MEMBER_NO) + DEL_YN='N' 고정 —
+         검색·필터·알러지 제외 없음(내 글이라 알러지 필터 무의미). ORDER BY 에 RECIPE_NO DESC tie-breaker.
+         ======================================================================== -->
+    <select id="getMyRecipeList" resultType="RecipeListItem">
+        SELECT
+               r.RECIPE_NO
+            ,  r.RECIPE_TITLE
+            ,  r.RECIPE_MAIN_IMG
+            ,  r.RECIPES_IMG_PATH
+            ,  m.MEMBER_NAME
+            ,  r.CREATE_DATE
+            ,  r.RECIPE_TYPE
+            ,  r.COOKING_METHOD
+            ,  r.CALORIE
+            ,  r.MAIN_MATERIAL
+            ,  r.VIEW_COUNT
+        <!-- /me 는 인증 전용 — 조회자(memberNo)가 곧 소유자. 내 글이라도 내가 북마크했으면 1. -->
+            ,  CASE WHEN bm.RECIPE_NO IS NULL THEN 0 ELSE 1 END AS IS_BOOKMARKED
+          FROM
+               RECIPES r
+          JOIN
+               MEMBER  m
+            ON r.MEMBER_NO = m.MEMBER_NO
+          LEFT JOIN
+               BOOKMARK bm
+            ON bm.RECIPE_NO = r.RECIPE_NO
+           AND bm.MEMBER_NO = #{memberNo}
+         WHERE
+               r.MEMBER_NO = #{memberNo}
+           AND r.DEL_YN    = 'N'
+         ORDER BY
+               r.CREATE_DATE DESC
+            ,  r.RECIPE_NO   DESC
+        OFFSET #{offset} ROWS FETCH NEXT #{size} ROWS ONLY
+    </select>
+
+    <select id="countMyRecipeList" resultType="int">
+        SELECT
+               COUNT(*)
+          FROM
+               RECIPES
+         WHERE
+               MEMBER_NO = #{memberNo}
+           AND DEL_YN    = 'N'
+    </select>
+
+    <!-- ========================================================================
          추천 조회 (GET /api/recipes/recommend) : 끼니당 목표 칼로리(perMeal) 근접도 상위 N
          - 회원 알러지 재료 제외 (getRecipeList 의 알러지 제외 서브쿼리와 동일)
          - CALORIE IS NOT NULL 인 레시피만 후보
@@ -219,11 +281,17 @@
             ,  r.CALORIE
             ,  r.MAIN_MATERIAL
             ,  r.VIEW_COUNT
+        <!-- /recommend 는 인증 전용이라 memberNo 항상 존재 — 목록·상세와 동일 구조 유지 -->
+            ,  CASE WHEN bm.RECIPE_NO IS NULL THEN 0 ELSE 1 END AS IS_BOOKMARKED
           FROM
                RECIPES r
           JOIN
                MEMBER  m
             ON r.MEMBER_NO = m.MEMBER_NO
+          LEFT JOIN
+               BOOKMARK bm
+            ON bm.RECIPE_NO = r.RECIPE_NO
+           AND bm.MEMBER_NO = #{memberNo}
          WHERE
                r.DEL_YN     = 'N'
            AND r.CALORIE IS NOT NULL
@@ -251,8 +319,8 @@
          ======================================================================== -->
 
     <!-- recipe 객체. RECIPE_MAIN_IMG(원본명) + RECIPES_IMG_PATH(S3 버킷 URL) 둘 다 내려준다 (별칭 안 씀).
-         isBookmarked 는 현재 0(false) 고정 — 즐겨찾기 기능 구현 시 Service 에서 실제 판정으로 교체
-         (그때 아래 '0 AS IS_BOOKMARKED' 도 제거). -->
+         isBookmarked : memberNo(로그인 회원 PK) 가 있으면 BOOKMARK 존재 여부로 판정, 비로그인(null)이면 0 고정.
+         상세 엔드포인트는 permitAll 유지 — 토큰이 있으면 판정, 없으면 false. -->
     <select id="getRecipeDetail" resultType="com.allergyout.recipe.model.dto.RecipeDetailItem">
         SELECT
                r.RECIPE_NO
@@ -272,12 +340,25 @@
             ,  r.SODIUM
             ,  r.MAIN_MATERIAL
             ,  r.VIEW_COUNT
+        <choose>
+            <when test="memberNo != null">
+            ,  CASE WHEN bm.RECIPE_NO IS NULL THEN 0 ELSE 1 END AS IS_BOOKMARKED
+            </when>
+            <otherwise>
             ,  0 AS IS_BOOKMARKED
+            </otherwise>
+        </choose>
           FROM
                RECIPES r
           JOIN
                MEMBER  m
             ON r.MEMBER_NO = m.MEMBER_NO
+        <if test="memberNo != null">
+          LEFT JOIN
+               BOOKMARK bm
+            ON bm.RECIPE_NO = r.RECIPE_NO
+           AND bm.MEMBER_NO = #{memberNo}
+        </if>
          WHERE
                r.RECIPE_NO = #{recipeNo}
            AND r.DEL_YN    = 'N'
