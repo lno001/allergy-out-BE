@@ -263,12 +263,13 @@
     </select>
 
     <!-- ========================================================================
-         추천 조회 (GET /api/recipes/recommend) : 끼니당 목표 칼로리(perMeal) 근접도 상위 N
+         칼로리 기반 추천 (GET /api/recipes/recommend/calorie) : 끼니당 목표 칼로리(perMeal) 근접도 상위 N
          - 회원 알러지 재료 제외 (getRecipeList 의 알러지 제외 서브쿼리와 동일)
          - CALORIE IS NOT NULL 인 레시피만 후보
          - |CALORIE - perMeal| 오름차순, 동점은 조회수 많은 순 → 등록 오래된 순 → RECIPE_NO
+         - 날짜기반 getRecommendRecipes 와 별개
          ======================================================================== -->
-    <select id="getRecommendedRecipes" resultType="RecipeListItem">
+    <select id="getCalorieRecommendRecipes" resultType="RecipeListItem">
         SELECT
                r.RECIPE_NO
             ,  r.RECIPE_TITLE
@@ -281,7 +282,7 @@
             ,  r.CALORIE
             ,  r.MAIN_MATERIAL
             ,  r.VIEW_COUNT
-        <!-- /recommend 는 인증 전용이라 memberNo 항상 존재 — 목록·상세와 동일 구조 유지 -->
+        <!-- /recommend/calorie 는 인증 전용이라 memberNo 항상 존재 — 목록·상세와 동일 구조 유지 -->
             ,  CASE WHEN bm.RECIPE_NO IS NULL THEN 0 ELSE 1 END AS IS_BOOKMARKED
           FROM
                RECIPES r

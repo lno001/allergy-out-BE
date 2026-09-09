@@ -52,7 +52,7 @@ public class RecipeService {
     private static final String DIR_RECIPE_MAIN = "recipes";
     private static final String DIR_RECIPE_STEP = "recipes/steps";
 
-    // 추천(GET /api/recipes/recommend) 파라미터 — 요청값 아님, 서비스 내부 고정
+    // 칼로리 기반 추천(GET /api/recipes/recommend/calorie) 파라미터 — 요청값 아님, 서비스 내부 고정
     private static final int MEALS_PER_DAY = 3;          // 하루 목표 칼로리를 이 값으로 나눠 끼니당 목표
     private static final int RECOMMEND_COUNT = 3;        // 추천 레시피 개수
     private static final double TOTAL_CALORIES_MAX = 10000d; // 하루 목표 칼로리 상한 (방어)
@@ -180,7 +180,7 @@ public class RecipeService {
 
     // 내 레시피 조회 (GET /api/recipes/me) — 로그인 회원이 작성한 레시피 최신순 페이징. data = { recipes, pageInfo }
     //  Controller @RequestParam 은 형식(타입·기본값)만 보장하므로 값 범위는 여기서 본다
-    //  (getRecommendedRecipes·BookmarkService.getBookmarkList 와 동일 방식 — 어느 파라미터가 왜 틀렸는지 data 로).
+    //  (getCalorieRecommendRecipes·BookmarkService.getBookmarkList 와 동일 방식 — 어느 파라미터가 왜 틀렸는지 data 로).
     @Transactional(readOnly = true)
     public RecipeListResponse getMyRecipeList(Long memberNo, int page, int size) {
         if (page < 0) {
@@ -227,18 +227,18 @@ public class RecipeService {
                 .replace("_", "\\_");
     }
 
-    // 오늘 하루 목표 칼로리 기준 추천 — FE 가 계산한 totalCalories 를 끼니 수로 나눈 값(perMeal)에
+    // 칼로리 기반 추천 (GET /api/recipes/recommend/calorie) — FE 가 계산한 totalCalories 를 끼니 수로 나눈 값(perMeal)에
     // CALORIE 가 가장 가까운 레시피 상위 N개. 회원 알러지 재료가 든 레시피는 제외.
-    // 후보가 없으면(칼로리 미기재/전부 알러지 제외) 빈 리스트 + 200.
+    // 후보가 없으면(칼로리 미기재/전부 알러지 제외) 빈 리스트 + 200. 날짜기반 "오늘의 추천"과 별개.
     @Transactional(readOnly = true)
-    public RecipeRecommendResponse getRecommendedRecipes(long memberNo, Double totalCalories) {
+    public RecipeRecommendResponse getCalorieRecommendRecipes(long memberNo, Double totalCalories) {
         if (totalCalories == null || totalCalories <= 0 || totalCalories > TOTAL_CALORIES_MAX) {
             throw new CustomException(ErrorCode.INVALID_INPUT_VALUE,
                     Map.of("totalCalories", "0 초과 " + (int) TOTAL_CALORIES_MAX + " 이하의 값이 필요합니다."));
         }
         double perMeal = totalCalories / MEALS_PER_DAY;
         List<RecipeListItem> recipes =
-                recipeMapper.getRecommendedRecipes(memberNo, perMeal, RECOMMEND_COUNT);
+                recipeMapper.getCalorieRecommendRecipes(memberNo, perMeal, RECOMMEND_COUNT);
         return new RecipeRecommendResponse(recipes);
     }
 

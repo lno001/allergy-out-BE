@@ -64,17 +64,18 @@ public class RecipeController {
         return ResponseEntity.ok(ApiResponse.success("오늘의 추천 레시피 조회 성공했습니다.", data));
     }
 
-    // GET /api/recipes/recommend?totalCalories=2100 — 인증 필요.
+    // GET /api/recipes/recommend/calorie?totalCalories=2100 — 인증 필요.
     // 오늘 하루 목표 칼로리(FE 계산) 기준 추천. 끼니당 목표(totalCalories/3)에 CALORIE 가 가장 가까운 3개,
-    // 회원 알러지 재료가 든 레시피는 제외. 후보 없으면 빈 리스트. 리터럴 "/recommend" 를 "/{recipeNo}" 앞에 둔다.
+    // 회원 알러지 재료가 든 레시피는 제외. 후보 없으면 빈 리스트.
+    // 날짜기반 "오늘의 추천"(GET /api/recipes/recommend)과 별개 엔드포인트다.
     // totalCalories 누락/범위밖은 Service 에서 400(INVALID_INPUT_VALUE), 숫자 아님은 400(TypeMismatch).
-    @GetMapping("/recommend")
-    public ResponseEntity<ApiResponse<RecipeRecommendResponse>> getRecommendedRecipes(
+    @GetMapping("/recommend/calorie")
+    public ResponseEntity<ApiResponse<RecipeRecommendResponse>> getCalorieRecommendRecipes(
             @RequestParam(name = "totalCalories", required = false) Double totalCalories,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
         RecipeRecommendResponse data =
-                recipeService.getRecommendedRecipes(userDetails.getMemberNo(), totalCalories);
-        return ResponseEntity.ok(ApiResponse.success("추천 레시피를 조회했습니다.", data));
+                recipeService.getCalorieRecommendRecipes(userDetails.getMemberNo(), totalCalories);
+        return ResponseEntity.ok(ApiResponse.success("칼로리 기반 추천 레시피를 조회했습니다.", data));
     }
 
     // GET /api/recipes/me — 인증 필요. 로그인 회원이 작성한 레시피 최신순 페이징.

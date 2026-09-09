@@ -63,13 +63,14 @@ public interface RecipeMapper {
     // 위와 같은 소유 조건으로 전체 건수 (totalPages 계산용).
     int countMyRecipeList(@Param("memberNo") Long memberNo);
 
-    // ---- 추천 조회 (GET /api/recipes/recommend) : 끼니당 목표 칼로리에 가장 가까운 레시피 top N ----
+    // ---- 칼로리 기반 추천 (GET /api/recipes/recommend/calorie) : 끼니당 목표 칼로리에 가장 가까운 레시피 top N ----
     //  응답 카드는 목록 조회와 동일한 RecipeListItem (프론트가 같은 카드 컴포넌트 재사용).
     //  RECIPES ⨝ MEMBER, DEL_YN='N', CALORIE IS NOT NULL, 회원 알러지 재료 제외(getRecipeList 의 알러지 제외 서브쿼리와 동일).
     //  정렬 |CALORIE - perMeal| 오름차순 → VIEW_COUNT 내림 → CREATE_DATE 오름 → RECIPE_NO 오름 (완전 결정론).
-    List<RecipeListItem> getRecommendedRecipes(@Param("memberNo") long memberNo,
-                                              @Param("perMeal") double perMeal,
-                                              @Param("count") int count);
+    //  날짜기반 getRecommendRecipes 와 별개.
+    List<RecipeListItem> getCalorieRecommendRecipes(@Param("memberNo") long memberNo,
+                                                    @Param("perMeal") double perMeal,
+                                                    @Param("count") int count);
 
     // ---- 상세 조회 : 집계 조회이므로 다중 쿼리 + Service 조립 ----
 
