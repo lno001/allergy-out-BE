@@ -64,25 +64,40 @@ public class RecipeController {
         return ResponseEntity.ok(ApiResponse.success("오늘의 추천 레시피 조회 성공했습니다.", data));
     }
 
-    // GET /api/recipes/recommend?totalCalories=2100 — 인증 필요.
+    // GET /api/recipes/recommend/calorie?totalCalories=2100 — 인증 필요.
     // 오늘 하루 목표 칼로리(FE 계산) 기준 추천. 끼니당 목표(totalCalories/3)에 CALORIE 가 가장 가까운 3개,
-    // 회원 알러지 재료가 든 레시피는 제외. 후보 없으면 빈 리스트. 리터럴 "/recommend" 를 "/{recipeNo}" 앞에 둔다.
+    // 회원 알러지 재료가 든 레시피는 제외. 후보 없으면 빈 리스트.
+    // 날짜기반 "오늘의 추천"(GET /api/recipes/recommend)과 별개 엔드포인트다.
     // totalCalories 누락/범위밖은 Service 에서 400(INVALID_INPUT_VALUE), 숫자 아님은 400(TypeMismatch).
-    @GetMapping("/recommend")
-    public ResponseEntity<ApiResponse<RecipeRecommendResponse>> getRecommendedRecipes(
+    @GetMapping("/recommend/calorie")
+    public ResponseEntity<ApiResponse<RecipeRecommendResponse>> getCalorieRecommendRecipes(
             @RequestParam(name = "totalCalories", required = false) Double totalCalories,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
         RecipeRecommendResponse data =
-                recipeService.getRecommendedRecipes(userDetails.getMemberNo(), totalCalories);
-        return ResponseEntity.ok(ApiResponse.success("추천 레시피를 조회했습니다.", data));
+                recipeService.getCalorieRecommendRecipes(userDetails.getMemberNo(), totalCalories);
+        return ResponseEntity.ok(ApiResponse.success("칼로리 기반 추천 레시피를 조회했습니다.", data));
     }
 
-    // GET /api/recipes/{recipeNo} — 인증 없음. 레시피 1건 상세 (recipe + 재료 + 조리 단계).
+    // GET /api/recipes/me — 인증 필요. 로그인 회원이 작성한 레시피 최신순 페이징.
+    // page·size 는 raw @RequestParam (형식·기본값만 보장), 값 범위 검증은 Service. 리터럴 "/me" 를 "/{recipeNo}" 앞에 둔다.
+    @GetMapping("/me")
+    public ResponseEntity<ApiResponse<RecipeListResponse>> getMyRecipeList(
+            @RequestParam(name = "page", defaultValue = "0") int page,
+            @RequestParam(name = "size", defaultValue = "20") int size,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        RecipeListResponse data = recipeService.getMyRecipeList(userDetails.getMemberNo(), page, size);
+        return ResponseEntity.ok(ApiResponse.success("내 레시피 목록을 조회했습니다.", data));
+    }
+
+    // GET /api/recipes/{recipeNo} — 인증 선택 (permitAll 유지, 토큰 없어도 200). 레시피 1건 상세 (recipe + 재료 + 조리 단계).
+    // 토큰이 있으면 그 회원의 즐겨찾기 여부(isBookmarked)를 판정, 없으면 false. 비로그인이면 userDetails = null.
     // recipeNo 가 숫자가 아니면 MethodArgumentTypeMismatchException → GlobalExceptionHandler 가 400.
     @GetMapping("/{recipeNo}")
     public ResponseEntity<ApiResponse<RecipeDetailResponse>> getRecipe(
-            @PathVariable("recipeNo") Long recipeNo) {  // 이름 명시 — Eclipse는 -parameters 없이 컴파일해서 필수
-        RecipeDetailResponse data = recipeService.getRecipe(recipeNo);
+            @PathVariable("recipeNo") Long recipeNo,  // 이름 명시 — Eclipse는 -parameters 없이 컴파일해서 필수
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        Long memberNo = (userDetails != null) ? userDetails.getMemberNo() : null;
+        RecipeDetailResponse data = recipeService.getRecipe(recipeNo, memberNo);
         return ResponseEntity.ok(ApiResponse.success("레시피 상세 조회 성공했습니다.", data));
     }
 

@@ -55,7 +55,9 @@ public class SecurityConfig {
                                 "/api/auth/refresh",
                                 "/api/auth/logout"
                         ).permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/recipes/recommend").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/recipes/me").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/recipes/recommend/calorie").authenticated() // 칼로리 기반 추천 — memberNo 필수
+                        .requestMatchers(HttpMethod.GET, "/api/recipes/recommend").permitAll()              // 날짜기반 "오늘의 추천" — 비로그인 허용(목록과 동일)
                         .requestMatchers(HttpMethod.GET, "/api/recipes/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/recipes").authenticated()
                         .requestMatchers(HttpMethod.PATCH, "/api/recipes/{recipeNo}").authenticated()

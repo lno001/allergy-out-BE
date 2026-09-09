@@ -213,11 +213,11 @@ class RecipeApiServerTest {
     @Test
     @DisplayName("실서버 GET /api/recipes → 200, recipes + pageInfo, createDate 포맷 + 신규 필드")
     void getRecipeList_realServer() {
-        when(recipeMapper.getRecipeList(0, 20, null, null, null, null, null, "latest")).thenReturn(List.of(
+        when(recipeMapper.getRecipeList(0, 20, null, null, null, null, null, null, "latest")).thenReturn(List.of(
                 new RecipeListItem(101L, "된장국", "doenjang.jpg",
                         "https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/1/101.jpg",
                         "관리자", LocalDate.of(2026, 8, 21),
-                        "국&찌개", "끓이기", 120.5, "두부", 88L)));
+                        "국&찌개", "끓이기", 120.5, "두부", 88L, false)));
         when(recipeMapper.countRecipeList(null, null, null, null, null)).thenReturn(37);
 
         String body = client.get().uri("/api/recipes")
@@ -246,11 +246,11 @@ class RecipeApiServerTest {
     @Test
     @DisplayName("실서버 GET /api/recipes?keyword=된장 → 200, keyword 가 매퍼로 전달")
     void getRecipeList_keyword_realServer() {
-        when(recipeMapper.getRecipeList(0, 20, null, "된장", null, null, null, "latest")).thenReturn(List.of(
+        when(recipeMapper.getRecipeList(0, 20, null, null, "된장", null, null, null, "latest")).thenReturn(List.of(
                 new RecipeListItem(101L, "된장국", "doenjang.jpg",
                         "https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/1/101.jpg",
                         "관리자", LocalDate.of(2026, 8, 21),
-                        "국&찌개", "끓이기", 120.5, "두부", 5L)));
+                        "국&찌개", "끓이기", 120.5, "두부", 5L, false)));
         when(recipeMapper.countRecipeList(null, "된장", null, null, null)).thenReturn(1);
 
         String body = client.get().uri("/api/recipes?keyword=된장")
@@ -261,21 +261,21 @@ class RecipeApiServerTest {
                 .contains("\"code\":200")
                 .contains("\"recipeNo\":101")
                 .contains("\"totalElements\":1");
-        Mockito.verify(recipeMapper).getRecipeList(0, 20, null, "된장", null, null, null, "latest");
+        Mockito.verify(recipeMapper).getRecipeList(0, 20, null, null, "된장", null, null, null, "latest");
     }
 
     // 필터 파라미터 end-to-end: recipeType·cookingMethod·sort 가 매퍼로 전달되는지
     @Test
     @DisplayName("실서버 GET /api/recipes?recipeType=반찬&cookingMethod=굽기&sort=popular → 200, 필터·정렬 전달")
     void getRecipeList_filterParams_realServer() {
-        when(recipeMapper.getRecipeList(0, 20, null, null, null, "반찬", "굽기", "popular")).thenReturn(List.of());
+        when(recipeMapper.getRecipeList(0, 20, null, null, null, null, "반찬", "굽기", "popular")).thenReturn(List.of());
         when(recipeMapper.countRecipeList(null, null, null, "반찬", "굽기")).thenReturn(0);
 
         var res = client.get().uri("/api/recipes?recipeType=반찬&cookingMethod=굽기&sort=popular")
                 .retrieve().toEntity(String.class);
 
         assertThat(res.getStatusCode()).isEqualTo(HttpStatus.OK);
-        Mockito.verify(recipeMapper).getRecipeList(0, 20, null, null, null, "반찬", "굽기", "popular");
+        Mockito.verify(recipeMapper).getRecipeList(0, 20, null, null, null, null, "반찬", "굽기", "popular");
     }
 
     // enum 밖 값 → @Valid → 400
@@ -288,7 +288,7 @@ class RecipeApiServerTest {
             assertThat(e.getStatusCode().value()).isEqualTo(400);
         }
         Mockito.verify(recipeMapper, Mockito.never())
-                .getRecipeList(anyInt(), anyInt(), any(), any(), any(), any(), any(), anyString());
+                .getRecipeList(anyInt(), anyInt(), any(), any(), any(), any(), any(), any(), anyString());
     }
 
     // /filter 제거됨 : GET /api/recipes/filter 는 이제 /{recipeNo} 로 매칭되고 "filter"→Long 변환 실패 → 400
@@ -300,9 +300,9 @@ class RecipeApiServerTest {
         } catch (RestClientResponseException e) {
             assertThat(e.getStatusCode().value()).isEqualTo(400);
         }
-        Mockito.verify(recipeMapper, Mockito.never()).getRecipeDetail(anyLong());
+        Mockito.verify(recipeMapper, Mockito.never()).getRecipeDetail(anyLong(), any());
         Mockito.verify(recipeMapper, Mockito.never())
-                .getRecipeList(anyInt(), anyInt(), any(), any(), any(), any(), any(), anyString());
+                .getRecipeList(anyInt(), anyInt(), any(), any(), any(), any(), any(), any(), anyString());
     }
 
     // 상세 조회 end-to-end: GET /api/recipes/{id} → 200, data.recipe/materials/steps.
@@ -310,7 +310,7 @@ class RecipeApiServerTest {
     @Test
     @DisplayName("실서버 GET /api/recipes/{id} → 200, recipe+materials+steps, 이미지 원본명·URL 둘 다")
     void getRecipe_realServer() {
-        when(recipeMapper.getRecipeDetail(5L)).thenReturn(new RecipeDetailItem(
+        when(recipeMapper.getRecipeDetail(5L, null)).thenReturn(new RecipeDetailItem(
                 5L, 7L, "된장국", "나트륨 줄인 된장국",                                  // recipeNo, memberNo(작성자)
                 "main.jpg",                                                          // RECIPE_MAIN_IMG  (원본명)
                 "https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/7/main.jpg",  // RECIPES_IMG_PATH (URL)
@@ -349,7 +349,7 @@ class RecipeApiServerTest {
     @Test
     @DisplayName("실서버 GET /api/recipes/{id}: 없는 레시피 → 404")
     void getRecipe_notFound() {
-        when(recipeMapper.getRecipeDetail(999L)).thenReturn(null);
+        when(recipeMapper.getRecipeDetail(999L, null)).thenReturn(null);
 
         RestClientResponseException e = org.junit.jupiter.api.Assertions.assertThrows(
                 RestClientResponseException.class,

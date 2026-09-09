@@ -52,7 +52,7 @@ public class RecipeService {
     private static final String DIR_RECIPE_MAIN = "recipes";
     private static final String DIR_RECIPE_STEP = "recipes/steps";
 
-    // 추천(GET /api/recipes/recommend) 파라미터 — 요청값 아님, 서비스 내부 고정
+    // 칼로리 기반 추천(GET /api/recipes/recommend/calorie) 파라미터 — 요청값 아님, 서비스 내부 고정
     private static final int MEALS_PER_DAY = 3;          // 하루 목표 칼로리를 이 값으로 나눠 끼니당 목표
     private static final int RECOMMEND_COUNT = 3;        // 추천 레시피 개수
     private static final double TOTAL_CALORIES_MAX = 10000d; // 하루 목표 칼로리 상한 (방어)
@@ -146,12 +146,14 @@ public class RecipeService {
         // applyMyAllergy: 미전송(null) 또는 "true" → 적용 / "false" → 미적용. (@Pattern 이 그 외 값은 이미 400)
         boolean applyMyAllergy = !"false".equals(query.applyMyAllergy());
         Long allergyMemberNo = (applyMyAllergy && memberNo != null) ? memberNo : null;
+        // 즐겨찾기 표시는 알러지 제외 on/off 와 무관하게 항상 로그인 회원 기준 (비로그인이면 null → IS_BOOKMARKED 0)
+        Long bookmarkMemberNo = memberNo;
 
         PageInfo pageInfo = new PageInfo(query.page(), query.size());
         int offset = pageInfo.getOffset();
 
         List<RecipeListItem> recipes = recipeMapper.getRecipeList(
-                offset, query.size(), allergyMemberNo, kw, excludes, recipeType, cookingMethod, sort);
+                offset, query.size(), allergyMemberNo, bookmarkMemberNo, kw, excludes, recipeType, cookingMethod, sort);
         int totalElements = recipeMapper.countRecipeList(
                 allergyMemberNo, kw, excludes, recipeType, cookingMethod);
 
@@ -174,6 +176,32 @@ public class RecipeService {
                 allergyMemberNo, kw, excludes, recipeType, cookingMethod, query.date());
 
         return new RecipeRecommendResponse(recipes);
+    }
+
+    // 내 레시피 조회 (GET /api/recipes/me) — 로그인 회원이 작성한 레시피 최신순 페이징. data = { recipes, pageInfo }
+    //  Controller @RequestParam 은 형식(타입·기본값)만 보장하므로 값 범위는 여기서 본다
+    //  (getCalorieRecommendRecipes·BookmarkService.getBookmarkList 와 동일 방식 — 어느 파라미터가 왜 틀렸는지 data 로).
+    @Transactional(readOnly = true)
+    public RecipeListResponse getMyRecipeList(Long memberNo, int page, int size) {
+        if (page < 0) {
+            throw new CustomException(ErrorCode.INVALID_INPUT_VALUE, Map.of("page", "0 이상이어야 합니다."));
+        }
+        if (size < 1 || size > 50) {
+            throw new CustomException(ErrorCode.INVALID_INPUT_VALUE, Map.of("size", "1 이상 50 이하여야 합니다."));
+        }
+
+        int totalElements = recipeMapper.countMyRecipeList(memberNo);
+        PageInfo pageInfo = new PageInfo(page, size);
+        pageInfo.calculateTotalPage(totalElements);
+
+        // 마지막 페이지 초과 조회 = 잘못된 요청 → 400 (빈 리스트 아님). page 0 또는 결과 0건은 정상.
+        if (totalElements > 0 && page >= pageInfo.getTotalPages()) {
+            throw new CustomException(ErrorCode.INVALID_INPUT_VALUE,
+                    Map.of("page", "존재하지 않는 페이지입니다."));
+        }
+
+        List<RecipeListItem> recipes = recipeMapper.getMyRecipeList(pageInfo.getOffset(), size, memberNo);
+        return new RecipeListResponse(recipes, pageInfo);
     }
 
     // 정렬 화이트리스트. "popular"(인기순=조회수 내림차순) 만 인정하고 나머지(null·오타·대문자)는 전부 "latest"(최신순).
@@ -199,18 +227,18 @@ public class RecipeService {
                 .replace("_", "\\_");
     }
 
-    // 오늘 하루 목표 칼로리 기준 추천 — FE 가 계산한 totalCalories 를 끼니 수로 나눈 값(perMeal)에
+    // 칼로리 기반 추천 (GET /api/recipes/recommend/calorie) — FE 가 계산한 totalCalories 를 끼니 수로 나눈 값(perMeal)에
     // CALORIE 가 가장 가까운 레시피 상위 N개. 회원 알러지 재료가 든 레시피는 제외.
-    // 후보가 없으면(칼로리 미기재/전부 알러지 제외) 빈 리스트 + 200.
+    // 후보가 없으면(칼로리 미기재/전부 알러지 제외) 빈 리스트 + 200. 날짜기반 "오늘의 추천"과 별개.
     @Transactional(readOnly = true)
-    public RecipeRecommendResponse getRecommendedRecipes(long memberNo, Double totalCalories) {
+    public RecipeRecommendResponse getCalorieRecommendRecipes(long memberNo, Double totalCalories) {
         if (totalCalories == null || totalCalories <= 0 || totalCalories > TOTAL_CALORIES_MAX) {
             throw new CustomException(ErrorCode.INVALID_INPUT_VALUE,
                     Map.of("totalCalories", "0 초과 " + (int) TOTAL_CALORIES_MAX + " 이하의 값이 필요합니다."));
         }
         double perMeal = totalCalories / MEALS_PER_DAY;
         List<RecipeListItem> recipes =
-                recipeMapper.getRecommendedRecipes(memberNo, perMeal, RECOMMEND_COUNT);
+                recipeMapper.getCalorieRecommendRecipes(memberNo, perMeal, RECOMMEND_COUNT);
         return new RecipeRecommendResponse(recipes);
     }
 
@@ -230,11 +258,12 @@ public class RecipeService {
     }
 
     // 상세 조회 — 집계 조회이므로 다중 쿼리(recipe ⨝ member / 재료 / 조리 단계) 결과를 조립.
-    // 인증 없음. data = { recipe, materials, steps }
+    // 인증 선택: memberNo != null 이면 매퍼가 그 회원의 즐겨찾기 여부(isBookmarked)를 판정, 비로그인(null)이면 false 고정.
+    // 엔드포인트는 permitAll 유지 (토큰 없어도 200). data = { recipe, materials, steps }
     // 조회 1회당 VIEW_COUNT +1 (그래서 readOnly 아님). 404 확인 후 카운트, 카운트 실패는 삼킴(조회는 성공).
     @Transactional
-    public RecipeDetailResponse getRecipe(Long recipeNo) {
-        RecipeDetailItem recipe = recipeMapper.getRecipeDetail(recipeNo);
+    public RecipeDetailResponse getRecipe(Long recipeNo, Long memberNo) {
+        RecipeDetailItem recipe = recipeMapper.getRecipeDetail(recipeNo, memberNo);
         if (recipe == null) {
             throw new CustomException(ErrorCode.RECIPE_NOT_FOUND);
         }
@@ -246,12 +275,6 @@ public class RecipeService {
             log.warn("viewCount 증가 실패 recipeNo={}", recipeNo, e);
         }
 
-        // isBookmarked 는 현재 매퍼가 false(0) 고정으로 내려준다.
-        // TODO: 즐겨찾기 기능 구현 시 —
-        //   ① RecipeService 에 BookmarkService 주입
-        //   ② Controller getRecipe 에 @AuthenticationPrincipal CustomUserDetails 추가 → memberNo 를 이 메서드로 전달
-        //   ③ 여기서 memberNo != null && bookmarkService.isBookmarked(memberNo, recipeNo) 로 recipe 를 재조립
-        //   ④ recipe-mapper.xml getRecipeDetail 의 '0 AS IS_BOOKMARKED' 제거
         return RecipeDetailResponse.of(
                 recipe,
                 recipeMapper.getMaterialsByRecipeNo(recipeNo),

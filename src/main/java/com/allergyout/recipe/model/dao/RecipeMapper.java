@@ -34,9 +34,12 @@ public interface RecipeMapper {
     //   recipeType       : RECIPE_TYPE 완전일치
     //   cookingMethod    : COOKING_METHOD 완전일치
     //   sort             : "popular"(VIEW_COUNT DESC) | 그 외 최신순. Service 화이트리스트 통과값이라 ${} 없이 <choose> 로 분기
+    //   bookmarkMemberNo : 즐겨찾기 표시용. 로그인 회원이면 그 회원 PK, 비로그인이면 null(→ IS_BOOKMARKED 0 고정).
+    //                      알러지 제외용 memberNo 와 별개 — applyMyAllergy=false 여도 즐겨찾기 표시는 동작해야 하므로
     List<RecipeListItem> getRecipeList(@Param("offset") int offset,
                                        @Param("size") int size,
                                        @Param("memberNo") Long memberNo,
+                                       @Param("bookmarkMemberNo") Long bookmarkMemberNo,
                                        @Param("keyword") String keyword,
                                        @Param("excludeMaterials") List<String> excludeMaterials,
                                        @Param("recipeType") String recipeType,
@@ -50,18 +53,30 @@ public interface RecipeMapper {
                         @Param("recipeType") String recipeType,
                         @Param("cookingMethod") String cookingMethod);
 
-    // ---- 추천 조회 (GET /api/recipes/recommend) : 끼니당 목표 칼로리에 가장 가까운 레시피 top N ----
+    // ---- 내 레시피 조회 (GET /api/recipes/me) : 로그인 회원이 작성한 레시피 최신순 페이징 ----
+    //  응답 카드는 목록 조회와 동일한 RecipeListItem. RECIPES ⨝ MEMBER, 소유(MEMBER_NO) + DEL_YN='N',
+    //  CREATE_DATE 최신순(tie-breaker RECIPE_NO DESC), OFFSET 페이징. 검색·필터·알러지 제외 없음(내 글이라 무의미).
+    List<RecipeListItem> getMyRecipeList(@Param("offset") int offset,
+                                        @Param("size") int size,
+                                        @Param("memberNo") Long memberNo);
+
+    // 위와 같은 소유 조건으로 전체 건수 (totalPages 계산용).
+    int countMyRecipeList(@Param("memberNo") Long memberNo);
+
+    // ---- 칼로리 기반 추천 (GET /api/recipes/recommend/calorie) : 끼니당 목표 칼로리에 가장 가까운 레시피 top N ----
     //  응답 카드는 목록 조회와 동일한 RecipeListItem (프론트가 같은 카드 컴포넌트 재사용).
     //  RECIPES ⨝ MEMBER, DEL_YN='N', CALORIE IS NOT NULL, 회원 알러지 재료 제외(getRecipeList 의 알러지 제외 서브쿼리와 동일).
     //  정렬 |CALORIE - perMeal| 오름차순 → VIEW_COUNT 내림 → CREATE_DATE 오름 → RECIPE_NO 오름 (완전 결정론).
-    List<RecipeListItem> getRecommendedRecipes(@Param("memberNo") long memberNo,
-                                              @Param("perMeal") double perMeal,
-                                              @Param("count") int count);
+    //  날짜기반 getRecommendRecipes 와 별개.
+    List<RecipeListItem> getCalorieRecommendRecipes(@Param("memberNo") long memberNo,
+                                                    @Param("perMeal") double perMeal,
+                                                    @Param("count") int count);
 
     // ---- 상세 조회 : 집계 조회이므로 다중 쿼리 + Service 조립 ----
 
     // RECIPES ⨝ MEMBER, DEL_YN='N'. 없으면 null.
-    RecipeDetailItem getRecipeDetail(long recipeNo);
+    //  memberNo : 로그인 회원이면 그 회원의 즐겨찾기 여부를 IS_BOOKMARKED(0/1)로 판정, 비로그인(null)이면 0 고정.
+    RecipeDetailItem getRecipeDetail(@Param("recipeNo") long recipeNo, @Param("memberNo") Long memberNo);
 
     // 상세 조회 1회당 VIEW_COUNT + 1 (Service 가 404 확인 후 try/catch 로 호출)
     void increaseViewCount(long recipeNo);
