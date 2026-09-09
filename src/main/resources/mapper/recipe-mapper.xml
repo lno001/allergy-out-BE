@@ -415,6 +415,8 @@
          ======================================================================== -->
 
     <!-- 수정 대상 조회 : 소유자(MEMBER_NO) 확인 + 기존 이미지 값(대표 이미지 미변경 시 재입력용) 확보 -->
+    <!-- 컬럼 순서·개수를 Recipe VO 생성자와 정확히 맞춘다 (MyBatis 컬럼순서 기반 생성자 자동매핑).
+         VO 필드가 바뀌면 이 SELECT 목록도 같이 고쳐야 한다. -->
     <select id="getRecipeByNo" resultType="com.allergyout.recipe.model.vo.Recipe">
         SELECT
                RECIPE_NO
@@ -423,6 +425,15 @@
             ,  RECIPE_INFO
             ,  RECIPE_MAIN_IMG
             ,  RECIPES_IMG_PATH
+            ,  COOKING_METHOD
+            ,  RECIPE_TYPE
+            ,  CALORIE
+            ,  CARBOHYDRATE
+            ,  PROTEIN
+            ,  FAT
+            ,  SODIUM
+            ,  MAIN_MATERIAL
+            ,  VIEW_COUNT
             ,  CREATE_DATE
             ,  DEL_YN
           FROM

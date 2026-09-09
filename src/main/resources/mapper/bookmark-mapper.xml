@@ -18,7 +18,9 @@
 
     <!-- 내 즐겨찾기 목록 — 북마크한 날짜(BOOKMARK.CREATE_DATE) 최신순, OFFSET 페이징.
          삭제된 레시피(RECIPES.DEL_YN='Y')는 제외. RECIPE_MAIN_IMG = 원본 파일명 /
-         RECIPES_IMG_PATH = S3 버킷 URL(프론트 썸네일). CREATE_DATE = 레시피 작성일. -->
+         RECIPES_IMG_PATH = S3 버킷 URL(프론트 썸네일). CREATE_DATE = 레시피 작성일.
+         프로젝션·컬럼순서는 recipe-mapper 의 getRecipeList / getMyRecipeList 와 동일 (프론트 RecipeCard 공용).
+         즐겨찾기 목록이므로 IS_BOOKMARKED 는 1 고정. -->
     <select id="getBookmarkList" resultType="BookmarkListItem">
         SELECT r.RECIPE_NO
              , r.RECIPE_TITLE
@@ -26,6 +28,12 @@
              , r.RECIPES_IMG_PATH
              , m.MEMBER_NAME
              , r.CREATE_DATE
+             , r.RECIPE_TYPE
+             , r.COOKING_METHOD
+             , r.CALORIE
+             , r.MAIN_MATERIAL
+             , r.VIEW_COUNT
+             , 1 AS IS_BOOKMARKED
           FROM BOOKMARK b
           JOIN RECIPES  r ON b.RECIPE_NO = r.RECIPE_NO
           JOIN MEMBER   m ON r.MEMBER_NO = m.MEMBER_NO

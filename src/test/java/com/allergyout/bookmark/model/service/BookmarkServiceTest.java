@@ -83,7 +83,8 @@ class BookmarkServiceTest {
     private BookmarkListItem item(long recipeNo) {
         return new BookmarkListItem(recipeNo, "제목" + recipeNo, "img.jpg",
                 "https://bucket.s3.ap-northeast-2.amazonaws.com/recipes/3/img.jpg", "김민재",
-                LocalDate.of(2026, 8, 18));
+                LocalDate.of(2026, 8, 18),
+                "반찬", "굽기", 210.0, "닭가슴살", 5L, true); // RecipeListItem 과 동일 12필드, isBookmarked 는 즐겨찾기 목록이라 true
     }
 
     @Test
