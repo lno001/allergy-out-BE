@@ -50,3 +50,9 @@ dependencies {
 tasks.named('test') {
 	useJUnitPlatform()
 }
+
+// 일반 jar(-plain.jar) 는 만들지 않는다. bootJar 만 사용 →
+// build/libs 에 실행용 jar 가 1개만 생겨 CI 스크립트의 `mv build/libs/*.jar` 가 안전해진다.
+tasks.named('jar') {
+	enabled = false
+}

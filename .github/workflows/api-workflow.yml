@@ -1,0 +1,81 @@
+name: API CI/CD
+
+# 실행 시점
+#  - main 으로 향하는 PR      → 빌드 + 전체 테스트만 (배포 안 함)
+#  - main 에 push(= PR 머지)  → 빌드 + 테스트 + EC2 배포
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# 같은 브랜치에 연속 push 하면 진행 중이던 실행을 취소 (러너 낭비 방지)
+concurrency:
+  group: api-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1) 저장소 코드를 러너로 내려받음
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 2) JDK 21 설치 + Gradle 의존성 캐시(2회차부터 빌드 빠름)
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      # 3) gradlew 실행 권한 (Windows 에서 만든 프로젝트라 필요)
+      - name: Grant execute permission for gradlew
+        run: chmod +x ./gradlew
+
+      # 4) 컴파일 + 전체 테스트 + bootJar.
+      #    테스트가 하나라도 깨지면 여기서 job 실패 → 아래 배포 스텝은 전부 스킵된다.
+      - name: Build & test
+        run: ./gradlew clean build
+
+      # 5) jar 존재 확인 + 이름 고정 (build.gradle 의 jar{enabled=false} 로 jar 는 1개)
+      - name: Verify jar
+        run: |
+          if [ ! -f build/libs/*.jar ]; then
+            echo "빌드 실패 : JAR파일을 찾을 수 없습니다."
+            exit 1
+          fi
+          echo "빌드 성공 : JAR파일이 생성되었습니다."
+          mv build/libs/*.jar build/libs/AllergyOut.jar
+
+      # ───────── 배포: main 머지(push) 일 때만 ─────────
+
+      # 6) jar 를 EC2 로 전송 → /home/ubuntu/app/AllergyOut.jar (기존 파일 덮어씀)
+      - name: Copy jar to EC2
+        if: github.event_name == 'push'
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "build/libs/AllergyOut.jar"
+          target: "/home/ubuntu/app"
+          strip_components: 2
+
+      # 7) EC2 에 SSH 접속해서 컨테이너 재시작 (마운트된 새 jar 로 java -jar 재실행)
+      - name: Restart on EC2
+        if: github.event_name == 'push'
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd /home/ubuntu/app
+            docker compose restart backend
+            sleep 10
+            docker compose ps
+            # TODO: spring-boot-starter-actuator 추가 후 헬스체크 넣기
+            #   curl -fsS http://localhost:8080/actuator/health || (echo "헬스체크 실패" && exit 1)
