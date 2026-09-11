@@ -46,7 +46,7 @@ public class SecurityConfig {
                                     "{\"code\":403,\"msg\":\"권한이 없습니다.\",\"data\":null}");
                         })
                 )
-                .sessionManagement(session ->
+                .sessionManagement(session ->	
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
@@ -72,6 +72,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/rasp/steps/**").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/rasp/devices").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/rasp/devices").authenticated()
+                        .requestMatchers("/actuator/health", "/actuator/prometheus").permitAll()
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
                         .requestMatchers("/api/admin/**").hasAuthority("ROLE_ADMIN")
                         .anyRequest().authenticated()

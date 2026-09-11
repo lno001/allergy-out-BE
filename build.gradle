@@ -33,6 +33,10 @@ dependencies {
 	// AWS S3
 	implementation platform('software.amazon.awssdk:bom:2.29.9')
 	implementation 'software.amazon.awssdk:s3'
+	
+	// prometheus
+	implementation 'org.springframework.boot:spring-boot-starter-actuator'
+	implementation 'io.micrometer:micrometer-registry-prometheus'
 
 	compileOnly 'org.projectlombok:lombok'
 	runtimeOnly 'com.oracle.database.jdbc:ojdbc17'
