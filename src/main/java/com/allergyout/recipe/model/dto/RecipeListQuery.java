@@ -45,8 +45,6 @@ public record RecipeListQuery(
         @Pattern(regexp = "true|false")                        // 그 외 값 → 400 (계약서). null 은 통과 → Service 가 true 로 간주
         String applyMyAllergy
 ) {
-    // query string 은 @RequestParam defaultValue 를 못 쓰므로, 미전송 시 기본값을 여기서 채운다.
-    // (제약 검증은 이 압축 생성자가 돈 뒤의 값으로 평가되므로 page=0 / size=20 은 항상 통과)
     public RecipeListQuery {
         if (page == null) {
             page = 0;

@@ -105,22 +105,18 @@
     <sql id="recipeListWhere">
         <where>
                r.DEL_YN = 'N'
-
            <!-- 1) 제목 검색 -->
            <if test="keyword != null">
            AND r.RECIPE_TITLE LIKE '%' || #{keyword} || '%' ESCAPE '\'
            </if>
-
            <!-- 2) 요리 종류 -->
            <if test="recipeType != null">
            AND r.RECIPE_TYPE = #{recipeType}
            </if>
-
            <!-- 3) 조리 방법 -->
            <if test="cookingMethod != null">
            AND r.COOKING_METHOD = #{cookingMethod}
            </if>
-
            <!-- 4) 회원 알러지 재료 제외 -->
            <if test="memberNo != null">
            AND r.RECIPE_NO NOT IN (
@@ -135,7 +131,6 @@
                           ma.MEMBER_NO = #{memberNo}
                )
            </if>
-
            <!-- 5) 사용자 지정 제외 재료 -->
            <if test="excludeMaterials != null and excludeMaterials.size() > 0">
            AND r.RECIPE_NO NOT IN (
@@ -155,6 +150,8 @@
     <!-- 목록 1페이지. 프로젝션에 신규 필드(RECIPE_TYPE·COOKING_METHOD·CALORIE·MAIN_MATERIAL·VIEW_COUNT) 포함.
          탄·단·지·나트륨은 목록 제외(상세에서만) — 계약서.
          RECIPE_MAIN_IMG = 원본 파일명 / RECIPES_IMG_PATH = S3 버킷 URL. 프론트 썸네일은 PATH 를 씀. -->
+        <!-- 정렬 : popular = 조회수 내림차순, 그 외(latest) = 최신순. 동점 tie-breaker 로 RECIPE_NO DESC 를 항상 붙여
+             페이지 경계에서 행이 중복·누락되지 않게 한다. sort 는 Service 화이트리스트("popular"|"latest") 통과값. -->
     <select id="getRecipeList" resultType="RecipeListItem">
         SELECT
                r.RECIPE_NO
@@ -188,8 +185,6 @@
            AND bm.MEMBER_NO = #{bookmarkMemberNo}
         </if>
         <include refid="recipeListWhere"/>
-        <!-- 정렬 : popular = 조회수 내림차순, 그 외(latest) = 최신순. 동점 tie-breaker 로 RECIPE_NO DESC 를 항상 붙여
-             페이지 경계에서 행이 중복·누락되지 않게 한다. sort 는 Service 화이트리스트("popular"|"latest") 통과값. -->
         <choose>
             <when test="sort == 'popular'">
         ORDER BY
@@ -219,6 +214,7 @@
          프로젝션은 getRecipeList 와 동일. WHERE 는 소유(MEMBER_NO) + DEL_YN='N' 고정 —
          검색·필터·알러지 제외 없음(내 글이라 알러지 필터 무의미). ORDER BY 에 RECIPE_NO DESC tie-breaker.
          ======================================================================== -->
+        <!-- /me 는 인증 전용 — 조회자(memberNo)가 곧 소유자. 내 글이라도 내가 북마크했으면 1. -->
     <select id="getMyRecipeList" resultType="RecipeListItem">
         SELECT
                r.RECIPE_NO
@@ -232,7 +228,6 @@
             ,  r.CALORIE
             ,  r.MAIN_MATERIAL
             ,  r.VIEW_COUNT
-        <!-- /me 는 인증 전용 — 조회자(memberNo)가 곧 소유자. 내 글이라도 내가 북마크했으면 1. -->
             ,  CASE WHEN bm.RECIPE_NO IS NULL THEN 0 ELSE 1 END AS IS_BOOKMARKED
           FROM
                RECIPES r
@@ -269,6 +264,7 @@
          - |CALORIE - perMeal| 오름차순, 동점은 조회수 많은 순 → 등록 오래된 순 → RECIPE_NO
          - 날짜기반 getRecommendRecipes 와 별개
          ======================================================================== -->
+        <!-- /recommend/calorie 는 인증 전용이라 memberNo 항상 존재 — 목록·상세와 동일 구조 유지 -->
     <select id="getCalorieRecommendRecipes" resultType="RecipeListItem">
         SELECT
                r.RECIPE_NO
@@ -282,7 +278,6 @@
             ,  r.CALORIE
             ,  r.MAIN_MATERIAL
             ,  r.VIEW_COUNT
-        <!-- /recommend/calorie 는 인증 전용이라 memberNo 항상 존재 — 목록·상세와 동일 구조 유지 -->
             ,  CASE WHEN bm.RECIPE_NO IS NULL THEN 0 ELSE 1 END AS IS_BOOKMARKED
           FROM
                RECIPES r
@@ -565,6 +560,15 @@
                ORA_HASH(TO_CHAR(r.RECIPE_NO) || #{date})
             ,  r.RECIPE_NO
         FETCH FIRST 3 ROWS ONLY
+    </select>
+    
+    <select id="getRecipeAllCount" resultType="Long">
+    	SELECT
+    			COUNT(*)
+    	  FROM
+    	  		RECIPES
+    	 WHERE
+    	 		DEL_YN = 'N' 		
     </select>
 
 </mapper>

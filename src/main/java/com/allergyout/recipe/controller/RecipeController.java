@@ -52,6 +52,11 @@ public class RecipeController {
         return ResponseEntity.ok(ApiResponse.success("레시피 목록 조회 성공했습니다.", data));
     }
     
+    @GetMapping("/count")
+    public ResponseEntity<ApiResponse<Long>> gerRecipesAllcount(){
+    	return ResponseEntity.ok(ApiResponse.success("레시피 총 갯수 조회 성공했습니다.", recipeService.getRecipeAllCount()));
+    }
+    
     // GET /api/recipes/recommend — 오늘의 추천 최대 3개. 인증 선택(목록과 동일).
     // date 는 필수(YYYY-MM-DD). 나머지 필터는 RecipeRecommendQuery @Valid.
     @GetMapping("/recommend")

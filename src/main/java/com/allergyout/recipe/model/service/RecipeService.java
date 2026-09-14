@@ -137,9 +137,7 @@ public class RecipeService {
     //  형식 검증(page·size 범위, enum, applyMyAllergy 값)은 RecipeListQuery @Valid 가 담당한다.
     @Transactional(readOnly = true)
     public RecipeListResponse getRecipeList(RecipeListQuery query, Long memberNo) {
-        // keyword 정규화: null·공백뿐이면 null(전체조회). trim 은 "양쪽 끝" 공백만 없앤다 —
-        // 문자 사이 공백은 그대로 유지되므로 "된 장" 으로 검색하면 "된장" 은 안 잡힌다(명세: keyword = 단어 하나).
-        String kw = normalizeKeyword(query.keyword());
+        String kw = normalizeKeyword(query.keyword()); // normalizeKeyword keyword가 있는지 확인후 공백을 없애주는 메소드
         List<String> excludes = normalizeExcludeMaterials(query.excludeMaterials()); // null/blank 항목 제거, 비면 null
         String recipeType = blankToNull(query.recipeType());
         String cookingMethod = blankToNull(query.cookingMethod());
@@ -565,4 +563,8 @@ public class RecipeService {
         String path = URI.create(url).getPath();
         return path.startsWith("/") ? path.substring(1) : path;
     }
+
+	public Long getRecipeAllCount() {
+		return recipeMapper.getRecipeAllCount();
+	}
 }
