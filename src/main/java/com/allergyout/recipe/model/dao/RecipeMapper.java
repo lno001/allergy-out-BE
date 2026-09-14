@@ -117,4 +117,6 @@ public interface RecipeMapper {
                                                   @Param("recipeType") String recipeType,
                                                   @Param("cookingMethod") String cookingMethod,
                                                   @Param("date") String date);
+
+	Long getRecipeAllCount();
 }
